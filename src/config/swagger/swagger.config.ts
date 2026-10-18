@@ -1,8 +1,34 @@
 import { DocumentBuilder } from '@nestjs/swagger';
 
 export const swaggerConfig = new DocumentBuilder()
-  .setTitle(process.env.SWAGGER_TITLE || 'Security RBAC API')
-  .setDescription(process.env.SWAGGER_DESCRIPTION || 'Centralized IAM Platform')
-  .setVersion(process.env.SWAGGER_VERSION || '1.0')
-  .addBearerAuth()
+  .setTitle('Security RBAC API')
+  .setDescription(
+    `
+Enterprise Identity and Access Management Platform.
+
+Features:
+• JWT Authentication
+• Role-Based Access Control (RBAC)
+• Multi Application Support
+• Roles & Permissions
+• Resources & Navigation
+• Session Management
+• Audit Logging
+• PostgreSQL + Supabase
+  `
+  )
+  .setVersion('1.0.0')
+  .setContact(
+    'Miguel Angel Rosales Jimenez',
+    'https://github.com/angelrosales1811',
+    'angelrosales1profesional@gmail.com'
+  )
+  .addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    },
+    'JWT'
+  )
   .build();
