@@ -6,6 +6,7 @@ import databaseConfig from './config/database/database.config';
 import supabaseConfig from './config/supabase/supabase.config';
 
 import { DocsModule } from './docs/docs.module';
+import { HomeModule } from './home/home.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
@@ -44,10 +45,11 @@ import { UsersModule } from './modules/users/users.module';
         },
       }),
     }),
+    HomeModule,
+    DocsModule,
     AuthModule,
     UsersModule,
     RolesModule,
-    DocsModule,
   ],
 })
 export class AppModule {}

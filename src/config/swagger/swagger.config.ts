@@ -20,7 +20,7 @@ Features:
   .setVersion('1.0.0')
   .setContact(
     'Miguel Angel Rosales Jimenez',
-    'https://github.com/angelrosales1811',
+    'https://angel-rosales.com',
     'angelrosales1profesional@gmail.com'
   )
   .addBearerAuth(
