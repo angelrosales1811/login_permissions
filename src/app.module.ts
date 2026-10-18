@@ -5,6 +5,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import databaseConfig from './config/database/database.config';
 import supabaseConfig from './config/supabase/supabase.config';
 
+import { AuthModule } from './modules/auth/auth.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { UsersModule } from './modules/users/users.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -39,6 +43,9 @@ import supabaseConfig from './config/supabase/supabase.config';
         },
       }),
     }),
+    AuthModule,
+    UsersModule,
+    RolesModule,
   ],
 })
 export class AppModule {}
