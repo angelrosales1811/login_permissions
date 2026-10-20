@@ -1,9 +1,24 @@
-import { Controller, Get, Res } from '@nestjs/common';
-import { Response } from 'express';
+import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
 
+import { Request, Response } from 'express';
+
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+
+import { JwtAuthGuard } from '../modules/auth/guards/jwt-auth.guard';
+
+@ApiTags('Home')
 @Controller()
 export class HomeController {
   @Get()
+  @ApiOperation({
+    summary: 'Página principal',
+    description:
+      'Muestra la página de bienvenida de la API y accesos directos a Swagger y OpenAPI.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Página principal cargada correctamente.',
+  })
   home(@Res() res: Response): void {
     res.send(`
 <!DOCTYPE html>
@@ -105,5 +120,25 @@ export class HomeController {
 
 </html>
 `);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Perfil desde JWT',
+    description:
+      'Obtiene la información del usuario autenticado a partir del token JWT enviado en la cabecera Authorization.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Información del usuario autenticado.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'No autorizado. Token inválido o expirado.',
+  })
+  profile(@Req() req: Request) {
+    return req.user;
   }
 }

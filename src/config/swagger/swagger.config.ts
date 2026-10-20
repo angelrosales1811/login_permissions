@@ -4,18 +4,18 @@ export const swaggerConfig = new DocumentBuilder()
   .setTitle('Security RBAC API')
   .setDescription(
     `
-Enterprise Identity and Access Management Platform.
+    Enterprise Identity and Access Management Platform.
 
-Features:
-• JWT Authentication
-• Role-Based Access Control (RBAC)
-• Multi Application Support
-• Roles & Permissions
-• Resources & Navigation
-• Session Management
-• Audit Logging
-• PostgreSQL + Supabase
-  `
+    Features:
+    • JWT Authentication
+    • Role-Based Access Control (RBAC)
+    • Multi Application Support
+    • Roles & Permissions
+    • Resources & Navigation
+    • Session Management
+    • Audit Logging
+    • PostgreSQL + Supabase
+      `
   )
   .setVersion('1.0.0')
   .setContact(
@@ -28,7 +28,8 @@ Features:
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'JWT',
+      description: 'Ingrese el JWT',
     },
-    'JWT'
+    'JWT-auth'
   )
   .build();

@@ -1,34 +1,77 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+
+import { AuthService } from './auth.service';
+import { LoginResponseDto } from './dto/login-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthUser } from './interfaces/auth-user.interface';
+
+import { CurrentUser } from './decorators/current-user.decorator';
+import { MeResponseDto } from './dto/me-response.dto';
+
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post()
-  create(@Body() createAuthDto: CreateAuthDto) {
-    return this.authService.create(createAuthDto);
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Autenticar usuario',
+    description:
+      'Valida las credenciales del usuario y genera un JWT para consumir los endpoints protegidos de la API.',
+  })
+  @ApiBody({
+    type: LoginDto,
+    description: 'Credenciales de acceso del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Autenticación exitosa',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Solicitud inválida. Error de validación en email o password.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Credenciales inválidas.',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Error interno del servidor.',
+  })
+  login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
   }
 
-  @Get()
-  findAll() {
-    return this.authService.findAll();
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Obtener usuario autenticado',
+    description:
+      'Devuelve la información básica del usuario asociada al JWT enviado en la petición.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Información del usuario autenticado',
+    type: MeResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido o expirado',
+  })
+  me(@CurrentUser() user: AuthUser): AuthUser {
+    return user;
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.authService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateAuthDto: UpdateAuthDto) {
-    return this.authService.update(+id, updateAuthDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.authService.remove(+id);
-  }
+  // @Post('refresh')
+  // @HttpCode(HttpStatus.OK)
+  // refresh(@Body() dto: any) {
+  //   return this.authService.refresh(dto);
+  // }
 }
