@@ -11,12 +11,18 @@ export class RefreshToken {
   @Column()
   user_id!: string;
 
-  @Column()
+  @Column({
+    type: 'text',
+  })
   token_hash!: string;
 
-  @Column()
+  @Column({
+    type: 'timestamptz',
+  })
   expires_at!: Date;
 
-  @Column()
+  @Column({
+    default: false,
+  })
   revoked!: boolean;
 }

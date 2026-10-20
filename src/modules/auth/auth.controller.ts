@@ -5,6 +5,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nes
 import { AuthService } from './auth.service';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthUser } from './interfaces/auth-user.interface';
 
@@ -69,9 +70,27 @@ export class AuthController {
     return user;
   }
 
-  // @Post('refresh')
-  // @HttpCode(HttpStatus.OK)
-  // refresh(@Body() dto: any) {
-  //   return this.authService.refresh(dto);
-  // }
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Renovar Access Token',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Nuevo JWT generado',
+  })
+  refresh(
+    @Body()
+    dto: RefreshTokenDto
+  ) {
+    return this.authService.refresh(dto);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  logout(@CurrentUser() user: AuthUser) {
+    return this.authService.logout(user.id);
+  }
 }

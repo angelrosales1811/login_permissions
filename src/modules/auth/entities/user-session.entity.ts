@@ -11,10 +11,13 @@ export class UserSession {
   @Column()
   user_id!: string;
 
-  @Column()
+  @Column({
+    type: 'timestamptz',
+  })
   login_at!: Date;
 
   @Column({
+    type: 'timestamptz',
     nullable: true,
   })
   logout_at?: Date;
@@ -25,10 +28,13 @@ export class UserSession {
   ip?: string;
 
   @Column({
+    type: 'text',
     nullable: true,
   })
   user_agent?: string;
 
-  @Column()
+  @Column({
+    default: true,
+  })
   active!: boolean;
 }
