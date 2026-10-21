@@ -28,8 +28,9 @@ export const swaggerConfig = new DocumentBuilder()
       type: 'http',
       scheme: 'bearer',
       bearerFormat: 'JWT',
-      description: 'Ingrese el JWT',
+      description: 'Introduzca únicamente el Access Token JWT.',
     },
     'JWT-auth'
   )
+
   .build();

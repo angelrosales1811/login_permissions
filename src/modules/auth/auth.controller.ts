@@ -10,7 +10,9 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthUser } from './interfaces/auth-user.interface';
 
 import { CurrentUser } from './decorators/current-user.decorator';
+import { LogoutResponseDto } from './dto/logout-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
+import { RefreshResponseDto } from './dto/refresh-response.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -74,10 +76,21 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Renovar Access Token',
+    description:
+      'Recibe un Refresh Token válido y genera un nuevo Access Token junto con un nuevo Refresh Token.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Nuevo JWT generado',
+    description: 'Token renovado correctamente',
+    type: RefreshResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Refresh Token inválido o expirado',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Error interno del servidor',
   })
   refresh(
     @Body()
@@ -90,6 +103,20 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Cerrar sesión',
+    description:
+      'Cierra la sesión activa del usuario autenticado, marca la sesión como inactiva y revoca todos los Refresh Tokens vigentes.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sesión cerrada correctamente',
+    type: LogoutResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido o expirado',
+  })
   logout(@CurrentUser() user: AuthUser) {
     return this.authService.logout(user.id);
   }

@@ -11,9 +11,7 @@ export class RefreshToken {
   @Column()
   user_id!: string;
 
-  @Column({
-    type: 'text',
-  })
+  @Column()
   token_hash!: string;
 
   @Column({
@@ -25,4 +23,13 @@ export class RefreshToken {
     default: false,
   })
   revoked!: boolean;
+  @Column({
+    type: 'timestamp',
+  })
+  created_at!: Date;
+
+  @Column({
+    nullable: true,
+  })
+  ip_creation!: string;
 }

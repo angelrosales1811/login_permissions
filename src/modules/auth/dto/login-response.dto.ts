@@ -22,6 +22,11 @@ export class LoginResponseDto {
   accessToken!: string;
 
   @ApiProperty({
+    example: 'eyJhbGciOiJIUzI1Ni...',
+  })
+  refreshToken!: string;
+
+  @ApiProperty({
     type: LoginUserDto,
     description: 'Información del usuario autenticado',
   })
