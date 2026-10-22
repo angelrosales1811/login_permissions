@@ -118,6 +118,13 @@ export class AuthController {
     description: 'Token inválido o expirado',
   })
   logout(@CurrentUser() user: AuthUser) {
-    return this.authService.logout(user.id);
+    return this.authService.logout(user.id, user.sessionId);
+  }
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  logoutAll(@CurrentUser() user: AuthUser) {
+    return this.authService.logoutAll(user.id);
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import crypto from 'crypto';
 import dayjs from 'dayjs';
 
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,6 +10,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 import { Repository } from 'typeorm';
 
+import { AuditLog } from '../audit/entities/audit-log.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 import { RefreshTokenPayload } from './interfaces/refresh-token-payload.interface';
@@ -19,12 +21,12 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-
     @InjectRepository(UserSession)
     private readonly sessionRepository: Repository<UserSession>,
-
     @InjectRepository(RefreshToken)
-    private readonly refreshRepository: Repository<RefreshToken>
+    private readonly refreshRepository: Repository<RefreshToken>,
+    @InjectRepository(AuditLog)
+    private readonly auditRepository: Repository<AuditLog>
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -40,26 +42,51 @@ export class AuthService {
       email,
     };
 
-    const accessToken = await this.jwtService.signAsync(payload);
+    const session = await this.sessionRepository.save({
+      user_id: payload.sub,
+      login_at: new Date(),
+      active: true,
+    });
 
-    const refreshToken = await this.generateRefreshToken(payload.sub);
+    const accessPayload = {
+      ...payload,
+      sessionId: session.id,
+    };
+
+    const familyId = crypto.randomUUID();
+    const accessToken = await this.jwtService.signAsync(accessPayload);
+
+    const refreshToken = await this.generateRefreshToken(
+      payload.sub,
+      payload.uid,
+      payload.email,
+      session.id,
+      familyId
+    );
     const refreshTokenHash = hashToken(refreshToken);
 
     await this.refreshRepository.save({
       user_id: payload.sub,
       token_hash: refreshTokenHash,
+
+      session_id: session.id,
+
+      token_family: familyId,
+
       expires_at: dayjs().add(30, 'day').toDate(),
+
       revoked: false,
+
       created_at: new Date(),
     });
 
-    console.log('ANTES SESSION');
-    await this.sessionRepository.save({
+    await this.auditRepository.save({
       user_id: payload.sub,
-      login_at: new Date(),
-      active: true,
+      module_name: 'AUTH',
+      entity_name: 'LOGIN',
+      action: 'LOGIN',
+      created_at: new Date(),
     });
-    console.log('DESPUES SESSION');
 
     return {
       accessToken,
@@ -71,19 +98,27 @@ export class AuthService {
     };
   }
 
-  private async generateRefreshToken(userId: string) {
-    const token = await this.jwtService.signAsync(
+  private async generateRefreshToken(
+    userId: string,
+    uid: string,
+    email: string,
+    sessionId: string,
+    familyId: string
+  ) {
+    return this.jwtService.signAsync(
       {
         sub: userId,
+        uid,
+        email,
+        sessionId,
+        familyId,
+        type: 'refresh',
       },
       {
-        secret: this.configService.get('REFRESH_TOKEN_SECRET'),
-
-        expiresIn: this.configService.get('REFRESH_TOKEN_EXPIRES_IN'),
+        secret: this.configService.getOrThrow('REFRESH_TOKEN_SECRET'),
+        expiresIn: this.configService.getOrThrow('REFRESH_TOKEN_EXPIRES_IN'),
       }
     );
-
-    return token;
   }
 
   async refresh(dto: RefreshTokenDto) {
@@ -92,7 +127,6 @@ export class AuthService {
     const token = await this.refreshRepository.findOne({
       where: {
         token_hash: refreshTokenHash,
-        revoked: false,
       },
     });
 
@@ -100,29 +134,102 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token inválido');
     }
 
-    if (token.expires_at < new Date()) {
+    if (token.revoked) {
+      await this.refreshRepository.update(
+        {
+          token_family: token.token_family,
+        },
+        {
+          revoked: true,
+        }
+      );
+
+      await this.sessionRepository.update(
+        {
+          id: token.session_id,
+        },
+        {
+          active: false,
+          logout_at: new Date(),
+        }
+      );
+      await this.auditRepository.save({
+        user_id: token.user_id,
+        module_name: 'AUTH',
+        entity_name: 'REFRESH_TOKEN',
+        action: 'TOKEN_REUSE_DETECTED',
+        created_at: new Date(),
+      });
+      throw new UnauthorizedException('Token reutilizado detectado');
+    }
+
+    if (token.expires_at && token.expires_at.getTime() < Date.now()) {
       throw new UnauthorizedException('Refresh token expirado');
     }
 
+    const session = await this.sessionRepository.findOne({
+      where: {
+        id: token.session_id,
+        active: true,
+      },
+    });
+
+    if (!session) {
+      throw new UnauthorizedException('Sesión cerrada');
+    }
+
     const payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(dto.refreshToken, {
-      secret: this.configService.get('REFRESH_TOKEN_SECRET'),
+      secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
     });
 
     const accessToken = await this.jwtService.signAsync({
       sub: payload.sub,
+      uid: payload.uid,
+      email: payload.email,
+      sessionId: payload.sessionId,
     });
 
     token.revoked = true;
 
-    const newRefreshToken = await this.generateRefreshToken(payload.sub);
+    token.used_at = new Date();
+
+    const newRefreshToken = await this.generateRefreshToken(
+      payload.sub,
+      payload.uid,
+      payload.email,
+      payload.sessionId,
+      payload.familyId
+    );
+
     const newRefreshTokenHash = hashToken(newRefreshToken);
 
-    await this.refreshRepository.save(token);
+    //await this.refreshRepository.save(token);
 
-    await this.refreshRepository.save({
+    const refreshRecord = await this.refreshRepository.save({
       user_id: payload.sub,
+
+      session_id: payload.sessionId,
+
+      token_family: payload.familyId,
+
       token_hash: newRefreshTokenHash,
+
       expires_at: dayjs().add(30, 'day').toDate(),
+
+      revoked: false,
+
+      created_at: new Date(),
+    });
+
+    token.replaced_by = refreshRecord.id;
+
+    await this.refreshRepository.save(token);
+    await this.auditRepository.save({
+      user_id: payload.sub,
+      module_name: 'AUTH',
+      entity_name: 'REFRESH_TOKEN',
+      action: 'REFRESH',
+      created_at: new Date(),
     });
 
     return {
@@ -135,7 +242,42 @@ export class AuthService {
     return user;
   }
 
-  async logout(userId: string) {
+  async logout(userId: string, sessionId: string) {
+    await this.sessionRepository.update(
+      {
+        id: sessionId,
+        user_id: userId,
+      },
+      {
+        active: false,
+        logout_at: new Date(),
+      }
+    );
+
+    await this.refreshRepository.update(
+      {
+        session_id: sessionId,
+        revoked: false,
+      },
+      {
+        revoked: true,
+      }
+    );
+
+    await this.auditRepository.save({
+      user_id: userId,
+      module_name: 'AUTH',
+      entity_name: 'LOGOUT',
+      action: 'LOGOUT',
+      created_at: new Date(),
+    });
+
+    return {
+      success: true,
+    };
+  }
+
+  async logoutAll(userId: string) {
     await this.sessionRepository.update(
       {
         user_id: userId,
@@ -156,6 +298,14 @@ export class AuthService {
         revoked: true,
       }
     );
+
+    await this.auditRepository.save({
+      user_id: userId,
+      module_name: 'AUTH',
+      entity_name: 'LOGOUT_ALL',
+      action: 'LOGOUT_ALL',
+      created_at: new Date(),
+    });
 
     return {
       success: true,

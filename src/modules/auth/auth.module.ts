@@ -10,6 +10,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
+import { AuditLog } from '../audit/entities/audit-log.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -17,7 +18,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Module({
   imports: [
     PassportModule,
-    TypeOrmModule.forFeature([UserSession, RefreshToken]),
+    TypeOrmModule.forFeature([UserSession, RefreshToken, AuditLog]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

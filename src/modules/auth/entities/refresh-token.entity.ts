@@ -15,6 +15,30 @@ export class RefreshToken {
   token_hash!: string;
 
   @Column({
+    type: 'uuid',
+    nullable: true,
+  })
+  session_id?: string;
+
+  @Column({
+    type: 'uuid',
+    nullable: true,
+  })
+  token_family?: string;
+
+  @Column({
+    type: 'uuid',
+    nullable: true,
+  })
+  replaced_by?: string;
+
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+  })
+  used_at?: Date;
+
+  @Column({
     type: 'timestamptz',
   })
   expires_at!: Date;
@@ -23,13 +47,14 @@ export class RefreshToken {
     default: false,
   })
   revoked!: boolean;
+
   @Column({
-    type: 'timestamp',
+    type: 'timestamptz',
   })
   created_at!: Date;
 
   @Column({
     nullable: true,
   })
-  ip_creation!: string;
+  ip_creation?: string;
 }
