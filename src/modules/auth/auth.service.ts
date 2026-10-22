@@ -37,7 +37,7 @@ export class AuthService {
     }
 
     const payload = {
-      sub: '00000000-0000-0000-0000-000000000001',
+      sub: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
       uid: 'USR000001',
       email,
     };

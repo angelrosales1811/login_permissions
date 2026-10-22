@@ -3,4 +3,6 @@ export interface AuthUser {
   uid: string;
   email: string;
   sessionId: string;
+
+  roles: string[];
 }

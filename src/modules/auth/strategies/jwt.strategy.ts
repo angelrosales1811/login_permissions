@@ -7,6 +7,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { RolesService } from '../../roles/roles.service';
 import { UserSession } from '../entities/user-session.entity';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
@@ -14,6 +15,7 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly configService: ConfigService,
+    private readonly rolesService: RolesService,
     @InjectRepository(UserSession)
     private readonly sessionRepository: Repository<UserSession>
   ) {
@@ -38,12 +40,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!session) {
       throw new UnauthorizedException('Sesión inválida');
     }
+    const roles = await this.rolesService.getUserRoles(payload.sub);
 
     return {
       id: payload.sub,
       uid: payload.uid,
       email: payload.email,
       sessionId: payload.sessionId,
+      roles,
     };
   }
 }

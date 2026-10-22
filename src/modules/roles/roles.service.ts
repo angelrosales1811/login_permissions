@@ -1,26 +1,89 @@
 import { Injectable } from '@nestjs/common';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+
+import { Repository } from 'typeorm';
+
+import { Role } from './entities/role.entity';
+import { UserRole } from './entities/user-role.entity';
 
 @Injectable()
 export class RolesService {
-  create(createRoleDto: CreateRoleDto) {
-    return 'This action adds a new role';
+  constructor(
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
+
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>
+  ) {}
+
+  async getUserRolesByUserId(userId: string): Promise<string[]> {
+    const userProfile = await this.userRoleRepository.findOne({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (!userProfile) {
+      return [];
+    }
+
+    return this.getUserRoles(userProfile.id);
+  }
+
+  async getUserRoles(userId: string): Promise<string[]> {
+    const userRoles = await this.userRoleRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (!userRoles.length) {
+      return [];
+    }
+
+    const roleIds = userRoles.map((item) => item.role_id);
+
+    const roles = await this.roleRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    return roles.filter((role) => roleIds.includes(role.id)).map((role) => role.internal_name);
+  }
+
+  create(createRoleDto: unknown) {
+    console.log(createRoleDto);
+    return {
+      message: 'Pendiente implementación',
+    };
   }
 
   findAll() {
-    return `This action returns all roles`;
+    return [];
   }
 
   findOne(id: number) {
-    return `This action returns a #${id} role`;
+    return {
+      id,
+      message: 'Pendiente implementación',
+    };
   }
 
-  update(id: number, updateRoleDto: UpdateRoleDto) {
-    return `This action updates a #${id} role`;
+  update(id: number, updateRoleDto: unknown) {
+    console.log(updateRoleDto);
+    return {
+      id,
+      message: 'Pendiente implementación',
+    };
   }
 
   remove(id: number) {
-    return `This action removes a #${id} role`;
+    return {
+      id,
+      message: 'Pendiente implementación',
+    };
   }
 }

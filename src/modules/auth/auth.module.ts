@@ -11,6 +11,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { RolesModule } from '../roles/roles.module';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -18,6 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Module({
   imports: [
     PassportModule,
+    RolesModule,
     TypeOrmModule.forFeature([UserSession, RefreshToken, AuditLog]),
     JwtModule.registerAsync({
       inject: [ConfigService],

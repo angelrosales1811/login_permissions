@@ -72,6 +72,12 @@ export class AuthController {
     return user;
   }
 
+  @Get('me2')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@CurrentUser() user: AuthUser) {
+    return user;
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
