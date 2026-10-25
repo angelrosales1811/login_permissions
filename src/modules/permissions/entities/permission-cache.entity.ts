@@ -11,13 +11,23 @@ export class PermissionCache {
   @Column()
   user_id!: string;
 
-  @Column({
-    type: 'jsonb',
-  })
-  permissions!: Record<string, unknown>;
+  @Column()
+  role_id!: string;
+
+  @Column()
+  resource_id!: string;
+
+  @Column()
+  application_id!: string;
+
+  @Column()
+  permission_code!: string;
 
   @Column({
-    type: 'timestamp',
+    type: 'timestamptz',
   })
-  updated_at!: Date;
+  calculated_at!: Date;
+
+  @Column()
+  active!: boolean;
 }

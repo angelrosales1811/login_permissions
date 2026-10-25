@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 
 import { Application } from '../applications/entities/application.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { RolePermission } from '../roles/entities/role-permission.entity';
@@ -44,15 +45,109 @@ export class AuthService {
     @InjectRepository(Application)
     private readonly applicationRepository: Repository<Application>,
 
+    @InjectRepository(PermissionCache)
+    private readonly permissionCacheRepository: Repository<PermissionCache>,
+
     @InjectRepository(RefreshToken)
     private readonly refreshRepository: Repository<RefreshToken>,
     @InjectRepository(AuditLog)
     private readonly auditRepository: Repository<AuditLog>
   ) {}
 
+  private async loadPermissionCache(
+    userId: string
+  ): Promise<Record<string, Record<string, string[]>> | null> {
+    const rows = await this.permissionCacheRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const resources = await this.resourceRepository.find();
+
+    const applications = await this.applicationRepository.find();
+
+    const result: Record<string, Record<string, string[]>> = {};
+
+    for (const row of rows) {
+      const application = applications.find((a) => a.id === row.application_id);
+
+      const resource = resources.find((r) => r.id === row.resource_id);
+
+      if (!application || !resource) {
+        continue;
+      }
+
+      const appCode = application.code;
+
+      const resourceCode = resource.internal_name;
+
+      if (!result[appCode]) {
+        result[appCode] = {};
+      }
+
+      if (!result[appCode][resourceCode]) {
+        result[appCode][resourceCode] = [];
+      }
+
+      result[appCode][resourceCode].push(row.permission_code);
+    }
+
+    return result;
+  }
+
+  private async savePermissionCache(
+    userId: string,
+    rolePermissions: RolePermission[]
+  ): Promise<void> {
+    await this.permissionCacheRepository.delete({
+      user_id: userId,
+    });
+
+    const cacheRows: Partial<PermissionCache>[] = [];
+
+    for (const item of rolePermissions) {
+      const permission = await this.permissionRepository.findOne({
+        where: {
+          id: item.permission_id,
+        },
+      });
+
+      if (!permission) {
+        continue;
+      }
+
+      cacheRows.push({
+        user_id: userId,
+        role_id: item.role_id,
+        resource_id: item.resource_id,
+        application_id: item.application_id,
+        permission_code: permission.permission_code,
+        calculated_at: new Date(),
+        active: true,
+      });
+    }
+
+    if (cacheRows.length) {
+      await this.permissionCacheRepository.save(cacheRows);
+    }
+  }
+
   private async getUserPermissions(
     userId: string
   ): Promise<Record<string, Record<string, string[]>>> {
+    const cache = await this.loadPermissionCache(userId);
+
+    if (cache) {
+      console.log('RBAC CACHE HIT');
+
+      return cache;
+    }
     const userRoles = await this.userRoleRepository.find({
       where: {
         user_id: userId,
@@ -73,6 +168,8 @@ export class AuthService {
     });
 
     const filteredPermissions = rolePermissions.filter((rp) => roleIds.includes(rp.role_id));
+
+    await this.savePermissionCache(userId, filteredPermissions);
 
     const result: Record<string, Record<string, string[]>> = {};
 
@@ -130,6 +227,12 @@ export class AuthService {
     }
 
     return result;
+  }
+
+  async invalidatePermissionCache(userId: string): Promise<void> {
+    await this.permissionCacheRepository.delete({
+      user_id: userId,
+    });
   }
 
   async login(loginDto: LoginDto) {

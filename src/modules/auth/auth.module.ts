@@ -22,6 +22,7 @@ import { UserSession } from './entities/user-session.entity';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
+import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { PermissionsGuard } from './guards/permission.guard';
 
 @Module({
@@ -37,6 +38,7 @@ import { PermissionsGuard } from './guards/permission.guard';
       Permission,
       Resource,
       Application,
+      PermissionCache,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

@@ -90,10 +90,4 @@ export class RolesService {
       message: 'Pendiente implementación',
     };
   }
-
-  async invalidateUserCache(userId: string): Promise<void> {
-    await this.permissionCacheRepository.delete({
-      user_id: userId,
-    });
-  }
 }
