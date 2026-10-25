@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
 
+import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { Role } from './entities/role.entity';
 import { UserRole } from './entities/user-role.entity';
 
@@ -13,7 +14,10 @@ export class RolesService {
     private readonly userRoleRepository: Repository<UserRole>,
 
     @InjectRepository(Role)
-    private readonly roleRepository: Repository<Role>
+    private readonly roleRepository: Repository<Role>,
+
+    @InjectRepository(PermissionCache)
+    private readonly permissionCacheRepository: Repository<PermissionCache>
   ) {}
 
   async getUserRolesByUserId(userId: string): Promise<string[]> {
@@ -85,5 +89,11 @@ export class RolesService {
       id,
       message: 'Pendiente implementación',
     };
+  }
+
+  async invalidateUserCache(userId: string): Promise<void> {
+    await this.permissionCacheRepository.delete({
+      user_id: userId,
+    });
   }
 }

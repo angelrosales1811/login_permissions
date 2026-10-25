@@ -19,7 +19,10 @@ import { UserRole } from '../roles/entities/user-role.entity';
 import { RolesModule } from '../roles/roles.module';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
+import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
+
+import { PermissionsGuard } from './guards/permission.guard';
 
 @Module({
   imports: [
@@ -49,7 +52,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
   controllers: [AuthController],
 
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, RolesGuard, PermissionsGuard, JwtStrategy],
 
   exports: [JwtModule, PassportModule],
 })
