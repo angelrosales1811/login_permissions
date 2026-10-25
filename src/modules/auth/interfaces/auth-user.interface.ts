@@ -5,4 +5,5 @@ export interface AuthUser {
   sessionId: string;
 
   roles: string[];
+  permissions: Record<string, Record<string, string[]>>;
 }

@@ -4,7 +4,7 @@ import { RolesService } from './roles.service';
 
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { Permission } from './entities/permission.entity';
+import { Permission } from '../permissions/entities/permission.entity';
 import { RolePermission } from './entities/role-permission.entity';
 import { Role } from './entities/role.entity';
 import { UserRole } from './entities/user-role.entity';

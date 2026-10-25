@@ -10,9 +10,15 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 import { Repository } from 'typeorm';
 
+import { Application } from '../applications/entities/application.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { Permission } from '../permissions/entities/permission.entity';
+import { Resource } from '../resources/entities/resource.entity';
+import { RolePermission } from '../roles/entities/role-permission.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
+
 import { RefreshTokenPayload } from './interfaces/refresh-token-payload.interface';
 import { hashToken } from './utils/hash-token.util';
 
@@ -23,11 +29,108 @@ export class AuthService {
     private readonly configService: ConfigService,
     @InjectRepository(UserSession)
     private readonly sessionRepository: Repository<UserSession>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
+
+    @InjectRepository(RolePermission)
+    private readonly rolePermissionRepository: Repository<RolePermission>,
+
+    @InjectRepository(Permission)
+    private readonly permissionRepository: Repository<Permission>,
+
+    @InjectRepository(Resource)
+    private readonly resourceRepository: Repository<Resource>,
+
+    @InjectRepository(Application)
+    private readonly applicationRepository: Repository<Application>,
+
     @InjectRepository(RefreshToken)
     private readonly refreshRepository: Repository<RefreshToken>,
     @InjectRepository(AuditLog)
     private readonly auditRepository: Repository<AuditLog>
   ) {}
+
+  private async getUserPermissions(
+    userId: string
+  ): Promise<Record<string, Record<string, string[]>>> {
+    const userRoles = await this.userRoleRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (!userRoles.length) {
+      return {};
+    }
+
+    const roleIds = userRoles.map((role) => role.role_id);
+
+    const rolePermissions = await this.rolePermissionRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const filteredPermissions = rolePermissions.filter((rp) => roleIds.includes(rp.role_id));
+
+    const result: Record<string, Record<string, string[]>> = {};
+
+    for (const item of filteredPermissions) {
+      const permission = await this.permissionRepository.findOne({
+        where: {
+          id: item.permission_id,
+          active: true,
+        },
+      });
+
+      if (!permission) {
+        continue;
+      }
+
+      const resource = await this.resourceRepository.findOne({
+        where: {
+          id: item.resource_id,
+          active: true,
+        },
+      });
+
+      if (!resource) {
+        continue;
+      }
+
+      const application = await this.applicationRepository.findOne({
+        where: {
+          id: item.application_id,
+          active: true,
+        },
+      });
+
+      if (!application) {
+        continue;
+      }
+
+      const applicationKey = application.code;
+
+      const resourceKey = resource.internal_name;
+
+      const action = permission.permission_code;
+
+      if (!result[applicationKey]) {
+        result[applicationKey] = {};
+      }
+
+      if (!result[applicationKey][resourceKey]) {
+        result[applicationKey][resourceKey] = [];
+      }
+
+      if (!result[applicationKey][resourceKey].includes(action)) {
+        result[applicationKey][resourceKey].push(action);
+      }
+    }
+
+    return result;
+  }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
@@ -35,11 +138,13 @@ export class AuthService {
     if (email !== 'admin@crm.com' || password !== '123456') {
       throw new UnauthorizedException('Credenciales inválidas');
     }
+    const permissions = await this.getUserPermissions('abc97121-c050-4bbe-a6e1-b39ccb68da0b');
 
     const payload = {
       sub: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
       uid: 'USR000001',
       email,
+      permissions,
     };
 
     const session = await this.sessionRepository.save({
@@ -50,6 +155,7 @@ export class AuthService {
 
     const accessPayload = {
       ...payload,
+      permissions,
       sessionId: session.id,
     };
 
