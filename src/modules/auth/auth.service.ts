@@ -17,6 +17,7 @@ import { Permission } from '../permissions/entities/permission.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { RolePermission } from '../roles/entities/role-permission.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
+import { RolesService } from '../roles/roles.service';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 
@@ -28,6 +29,8 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly rolesService: RolesService,
+
     @InjectRepository(UserSession)
     private readonly sessionRepository: Repository<UserSession>,
     @InjectRepository(UserRole)
@@ -119,6 +122,18 @@ export class AuthService {
       });
 
       if (!permission) {
+        continue;
+      }
+
+      const alreadyExists = cacheRows.some(
+        (row) =>
+          row.user_id === userId &&
+          row.application_id === item.application_id &&
+          row.resource_id === item.resource_id &&
+          row.permission_code === permission.permission_code
+      );
+
+      if (alreadyExists) {
         continue;
       }
 
@@ -243,10 +258,13 @@ export class AuthService {
     }
     const permissions = await this.getUserPermissions('abc97121-c050-4bbe-a6e1-b39ccb68da0b');
 
+    const roles = await this.rolesService.getUserRoles('abc97121-c050-4bbe-a6e1-b39ccb68da0b');
+
     const payload = {
       sub: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
       uid: 'USR000001',
       email,
+      roles,
       permissions,
     };
 
@@ -391,11 +409,17 @@ export class AuthService {
       secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
     });
 
+    const roles = await this.rolesService.getUserRoles(payload.sub);
+
+    const permissions = await this.getUserPermissions(payload.sub);
+
     const accessToken = await this.jwtService.signAsync({
       sub: payload.sub,
       uid: payload.uid,
       email: payload.email,
       sessionId: payload.sessionId,
+      roles,
+      permissions,
     });
 
     token.revoked = true;

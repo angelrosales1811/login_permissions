@@ -55,7 +55,9 @@ export class RolesService {
       },
     });
 
-    return roles.filter((role) => roleIds.includes(role.id)).map((role) => role.internal_name);
+    return roles
+      .filter((role) => roleIds.includes(role.id))
+      .map((role) => role.internal_name.toUpperCase());
   }
 
   create(createRoleDto: unknown) {

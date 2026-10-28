@@ -1,5 +1,11 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
 
+@Unique('permission_cache_user_resource_permission_key', [
+  'user_id',
+  'application_id',
+  'resource_id',
+  'permission_code',
+])
 @Entity({
   schema: 'security',
   name: 'permission_cache',

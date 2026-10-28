@@ -16,7 +16,12 @@ export class MeResponseDto {
   roles!: string[];
 
   @ApiProperty({
-    type: [String],
+    example: {
+      CRM: {
+        USERS: ['CREATE', 'READ', 'UPDATE'],
+        ROLES: ['READ'],
+      },
+    },
   })
-  permissions!: string[];
+  permissions!: Record<string, Record<string, string[]>>;
 }
