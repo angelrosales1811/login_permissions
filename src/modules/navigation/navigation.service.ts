@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CreateNavigationDto } from './dto/create-navigation.dto';
+import { MenuResponseDto } from './dto/menu-response.dto';
 import { UpdateNavigationDto } from './dto/update-navigation.dto';
 
 @Injectable()
@@ -22,5 +23,9 @@ export class NavigationService {
 
   remove(id: number) {
     return `This action removes a #${id} navigation`;
+  }
+
+  async getMenusByUser(userId: string): Promise<MenuResponseDto[]> {
+    return [];
   }
 }

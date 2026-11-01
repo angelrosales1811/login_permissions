@@ -1,7 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { NavigationService } from './navigation.service';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { CreateNavigationDto } from './dto/create-navigation.dto';
 import { UpdateNavigationDto } from './dto/update-navigation.dto';
+import { NavigationService } from './navigation.service';
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthUser } from '../auth/interfaces/auth-user.interface';
 
 @Controller('navigation')
 export class NavigationController {
@@ -30,5 +34,11 @@ export class NavigationController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.navigationService.remove(+id);
+  }
+
+  @Get('my-menu')
+  @UseGuards(JwtAuthGuard)
+  async getMyMenu(@CurrentUser() user: AuthUser) {
+    return this.navigationService.getMenusByUser(user.id);
   }
 }
