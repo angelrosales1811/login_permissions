@@ -23,6 +23,7 @@ import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
+import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { PermissionsGuard } from './guards/permission.guard';
 
 @Module({
@@ -54,7 +55,7 @@ import { PermissionsGuard } from './guards/permission.guard';
 
   controllers: [AuthController],
 
-  providers: [AuthService, RolesGuard, PermissionsGuard, JwtStrategy],
+  providers: [AuthService, RolesGuard, PermissionsGuard, JwtStrategy, PermissionCacheService],
 
   exports: [JwtModule, PassportModule],
 })

@@ -436,8 +436,6 @@ export class AuthService {
 
     const newRefreshTokenHash = hashToken(newRefreshToken);
 
-    //await this.refreshRepository.save(token);
-
     const refreshRecord = await this.refreshRepository.save({
       user_id: payload.sub,
 
