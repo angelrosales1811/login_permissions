@@ -142,7 +142,10 @@ export class AuthService {
         role_id: item.role_id,
         resource_id: item.resource_id,
         application_id: item.application_id,
+
+        permission_id: permission.id,
         permission_code: permission.permission_code,
+
         calculated_at: new Date(),
         active: true,
       });

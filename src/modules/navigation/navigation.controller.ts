@@ -21,6 +21,12 @@ export class NavigationController {
     return this.navigationService.findAll();
   }
 
+  @Get('my-menu')
+  @UseGuards(JwtAuthGuard)
+  async getMyMenu(@CurrentUser() user: AuthUser) {
+    return this.navigationService.getMenusByUser(user.id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.navigationService.findOne(+id);
@@ -34,11 +40,5 @@ export class NavigationController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.navigationService.remove(+id);
-  }
-
-  @Get('my-menu')
-  @UseGuards(JwtAuthGuard)
-  async getMyMenu(@CurrentUser() user: AuthUser) {
-    return this.navigationService.getMenusByUser(user.id);
   }
 }

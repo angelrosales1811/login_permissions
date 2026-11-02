@@ -8,6 +8,7 @@ import supabaseConfig from './config/supabase/supabase.config';
 import { DocsModule } from './docs/docs.module';
 import { HomeModule } from './home/home.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { NavigationModule } from './modules/navigation/navigation.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -50,6 +51,7 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     UsersModule,
     RolesModule,
+    NavigationModule,
   ],
 })
 export class AppModule {}

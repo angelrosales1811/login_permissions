@@ -26,6 +26,11 @@ export class PermissionCache {
   @Column()
   application_id!: string;
 
+  @Column({
+    name: 'permission_id',
+  })
+  permission_id!: string;
+
   @Column()
   permission_code!: string;
 

@@ -3,7 +3,7 @@ export class MenuItemResponseDto {
 
   name: string;
 
-  route: string;
+  route?: string;
 
   icon?: string;
 }
