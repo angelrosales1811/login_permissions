@@ -22,13 +22,17 @@ import { UserSession } from './entities/user-session.entity';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
+//import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
+
 import { PermissionCacheService } from '../permissions/permission-cache.service';
+import { UserProfile } from '../users/entities/user-profile.entity';
 import { PermissionsGuard } from './guards/permission.guard';
 
 @Module({
   imports: [
     PassportModule,
+    // SupabaseModule,
     RolesModule,
     TypeOrmModule.forFeature([
       UserSession,
@@ -40,6 +44,7 @@ import { PermissionsGuard } from './guards/permission.guard';
       Resource,
       Application,
       PermissionCache,
+      UserProfile,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

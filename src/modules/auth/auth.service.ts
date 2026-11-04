@@ -8,7 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
+//import { Inject } from '@nestjs/common';
+//import { SupabaseClient } from '@supabase/supabase-js';
 import { Repository } from 'typeorm';
+
+import { UserProfile } from '../users/entities/user-profile.entity';
 
 import { Application } from '../applications/entities/application.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
@@ -23,6 +27,13 @@ import { UserSession } from './entities/user-session.entity';
 
 import { RefreshTokenPayload } from './interfaces/refresh-token-payload.interface';
 import { hashToken } from './utils/hash-token.util';
+
+interface SupabaseLoginResponse {
+  user: {
+    id: string;
+    email: string;
+  };
+}
 
 @Injectable()
 export class AuthService {
@@ -53,9 +64,43 @@ export class AuthService {
 
     @InjectRepository(RefreshToken)
     private readonly refreshRepository: Repository<RefreshToken>,
+
     @InjectRepository(AuditLog)
-    private readonly auditRepository: Repository<AuditLog>
+    private readonly auditRepository: Repository<AuditLog>,
+
+    @InjectRepository(UserProfile)
+    private readonly userProfileRepository: Repository<UserProfile>
+
+    // @Inject('SUPABASE_CLIENT')
+    // private readonly supabase: SupabaseClient
   ) {}
+
+  private async authenticateWithSupabase(email: string, password: string) {
+    const response = await fetch(
+      `${this.configService.getOrThrow('SUPABASE_URL')}/auth/v1/token?grant_type=password`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: this.configService.getOrThrow('SUPABASE_ANON_KEY'),
+
+          'Content-Type': 'application/json',
+        },
+
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      }
+    );
+
+    const data = (await response.json()) as SupabaseLoginResponse;
+
+    if (!response.ok) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    return data;
+  }
 
   private async loadPermissionCache(
     userId: string
@@ -256,17 +301,29 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    if (email !== 'admin@crm.com' || password !== '123456') {
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
-    const permissions = await this.getUserPermissions('abc97121-c050-4bbe-a6e1-b39ccb68da0b');
+    const supabaseAuth = await this.authenticateWithSupabase(email, password);
+    const profile = await this.userProfileRepository.findOne({
+      where: {
+        auth_user_id: supabaseAuth.user.id,
+        active: true,
+      },
+    });
 
-    const roles = await this.rolesService.getUserRoles('abc97121-c050-4bbe-a6e1-b39ccb68da0b');
+    if (!profile) {
+      throw new UnauthorizedException('Perfil de usuario no encontrado');
+    }
+
+    const permissions = await this.getUserPermissions(profile.id);
+
+    const roles = await this.rolesService.getUserRoles(profile.id);
 
     const payload = {
-      sub: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
-      uid: 'USR000001',
-      email,
+      sub: profile.id,
+
+      uid: profile.auth_user_id,
+
+      email: profile.email,
+
       roles,
       permissions,
     };
@@ -323,7 +380,7 @@ export class AuthService {
       refreshToken,
       user: {
         uid: payload.uid,
-        email,
+        email: payload.email,
       },
     };
   }
