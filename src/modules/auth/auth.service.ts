@@ -26,7 +26,10 @@ import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 
 import { RefreshTokenPayload } from './interfaces/refresh-token-payload.interface';
+import { SupabaseOAuthUser } from './interfaces/supabase-oauth-user.interface';
 import { hashToken } from './utils/hash-token.util';
+
+import { BadRequestException } from '@nestjs/common';
 
 interface SupabaseLoginResponse {
   user: {
@@ -298,6 +301,51 @@ export class AuthService {
     });
   }
 
+  private async synchronizeUserProfile(oauthUser: {
+    auth_user_id: string;
+    email: string;
+    full_name?: string;
+    avatar_url?: string;
+  }): Promise<UserProfile> {
+    let profile = await this.userProfileRepository.findOne({
+      where: {
+        auth_user_id: oauthUser.auth_user_id,
+      },
+    });
+
+    if (profile) {
+      return profile;
+    }
+
+    profile = this.userProfileRepository.create({
+      auth_user_id: oauthUser.auth_user_id,
+
+      email: oauthUser.email,
+
+      full_name: oauthUser.full_name,
+
+      avatar_url: oauthUser.avatar_url,
+
+      active: true,
+    });
+
+    const savedProfile = await this.userProfileRepository.save(profile);
+
+    await this.auditRepository.save({
+      user_id: savedProfile.id,
+
+      module_name: 'AUTH',
+
+      entity_name: 'USER_PROFILE',
+
+      action: 'GOOGLE_PROFILE_CREATED',
+
+      created_at: new Date(),
+    });
+
+    return savedProfile;
+  }
+
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
@@ -381,6 +429,86 @@ export class AuthService {
       user: {
         uid: payload.uid,
         email: payload.email,
+      },
+    };
+  }
+
+  getGoogleAuthUrl() {
+    const supabaseUrl = this.configService.getOrThrow<string>('SUPABASE_URL');
+
+    const provider = this.configService.get<string>('GOOGLE_PROVIDER') ?? 'google';
+
+    const redirectTo = this.configService.getOrThrow<string>('FRONTEND_CALLBACK_URL');
+
+    const authUrl =
+      `${supabaseUrl}/auth/v1/authorize` +
+      `?provider=${provider}` +
+      `&redirect_to=${encodeURIComponent(redirectTo)}`;
+
+    // FASE 10:
+    // Registrar evento OAUTH_START
+    // cuando exista esquema de auditoría OAuth.
+    return {
+      authUrl,
+    };
+  }
+
+  async googleCallback(accessToken: string) {
+    if (!accessToken) {
+      throw new BadRequestException('Access token requerido');
+    }
+
+    const response = await fetch(`${this.configService.getOrThrow('SUPABASE_URL')}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+
+        apikey: this.configService.getOrThrow('SUPABASE_ANON_KEY'),
+      },
+    });
+
+    if (!response.ok) {
+      throw new BadRequestException('Token OAuth inválido');
+    }
+
+    const user = (await response.json()) as SupabaseOAuthUser;
+
+    const existingProfile = await this.userProfileRepository.findOne({
+      where: {
+        auth_user_id: user.id,
+      },
+    });
+
+    const profileCreated = !existingProfile;
+
+    const profile = await this.synchronizeUserProfile({
+      auth_user_id: user.id,
+
+      email: user.email ?? '',
+
+      full_name:
+        typeof user.user_metadata?.full_name === 'string'
+          ? user.user_metadata.full_name
+          : undefined,
+
+      avatar_url:
+        typeof user.user_metadata?.avatar_url === 'string'
+          ? user.user_metadata.avatar_url
+          : undefined,
+    });
+
+    return {
+      authenticated: true,
+
+      profileCreated,
+
+      user: {
+        auth_user_id: profile.auth_user_id,
+
+        email: profile.email,
+
+        full_name: profile.full_name,
+
+        avatar_url: profile.avatar_url,
       },
     };
   }

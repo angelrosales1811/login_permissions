@@ -1,6 +1,13 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  // ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
 import { LoginResponseDto } from './dto/login-response.dto';
@@ -14,10 +21,45 @@ import { LogoutResponseDto } from './dto/logout-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
 
+import { OAuthUrlResponseDto } from './dto/oauth-url-response.dto';
+//import { SocialLoginResponseDto } from './dto/social-login-response.dto';
+
+import { GoogleCallbackResponseDto } from './dto/google-callback-response.dto';
+import { GoogleCallbackDto } from './dto/google-callback.dto';
+
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('google')
+  @ApiOperation({
+    summary: 'Iniciar autenticación Google',
+    description: 'Genera la URL OAuth de Supabase para autenticar usuarios mediante Google.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'URL OAuth generada correctamente',
+    type: OAuthUrlResponseDto,
+  })
+  getGoogleAuthUrl() {
+    return this.authService.getGoogleAuthUrl();
+  }
+
+  @Post('google/callback')
+  @ApiOperation({
+    summary: 'Procesar callback Google OAuth',
+  })
+  @ApiResponse({
+    status: 200,
+    type: GoogleCallbackResponseDto,
+  })
+  googleCallback(
+    @Body()
+    dto: GoogleCallbackDto
+  ) {
+    return this.authService.googleCallback(dto.accessToken);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
