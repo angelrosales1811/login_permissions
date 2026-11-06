@@ -12,5 +12,6 @@ import { NavigationService } from './navigation.service';
   imports: [TypeOrmModule.forFeature([MenuEntity, MenuItemEntity, MenuPermissionEntity])],
   controllers: [NavigationController],
   providers: [NavigationService],
+  exports: [NavigationService],
 })
 export class NavigationModule {}

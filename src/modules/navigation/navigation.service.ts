@@ -126,4 +126,10 @@ export class NavigationService {
 
     return response;
   }
+
+  async hasAvailableMenus(userId: string): Promise<boolean> {
+    const menus = await this.getMenusByUser(userId);
+
+    return menus.length > 0;
+  }
 }

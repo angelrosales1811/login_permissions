@@ -8,14 +8,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
-//import { Inject } from '@nestjs/common';
-//import { SupabaseClient } from '@supabase/supabase-js';
 import { Repository } from 'typeorm';
 
 import { UserProfile } from '../users/entities/user-profile.entity';
 
 import { Application } from '../applications/entities/application.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { NavigationService } from '../navigation/navigation.service';
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
@@ -24,6 +23,7 @@ import { RolePermission } from '../roles/entities/role-permission.entity';
 import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { RolesService } from '../roles/roles.service';
+
 import { RefreshToken } from './entities/refresh-token.entity';
 import { UserSession } from './entities/user-session.entity';
 
@@ -47,6 +47,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly rolesService: RolesService,
     private readonly permissionCacheService: PermissionCacheService,
+    private readonly navigationService: NavigationService,
 
     @InjectRepository(UserSession)
     private readonly sessionRepository: Repository<UserSession>,
@@ -468,6 +469,30 @@ export class AuthService {
     return true;
   }
 
+  private async validateProvisioning(userId: string): Promise<void> {
+    const activeRoles = await this.userRoleRepository.count({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (activeRoles === 0) {
+      throw new BadRequestException('Provisioning inválido: usuario sin roles');
+    }
+
+    const cachedPermissions = await this.permissionCacheRepository.count({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (cachedPermissions === 0) {
+      throw new BadRequestException('Provisioning inválido: permission cache vacío');
+    }
+  }
+
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
@@ -639,7 +664,7 @@ export class AuthService {
       },
     });
 
-    const profileCreated = !existingProfile;
+    const profileCreated = !existingProfile; //////////////////////////////////////
 
     const profile = await this.synchronizeUserProfile({
       auth_user_id: user.id,
@@ -694,19 +719,76 @@ export class AuthService {
       });
     }
 
-    const guestAssigned = await this.assignGuestRoleIfNeeded(profile.id);
+    // const guestAssigned = await this.assignGuestRoleIfNeeded(profile.id); ///////////////////////
 
-    const generatedPermissions = await this.permissionCacheService.generateUserPermissionCache(
-      profile.id
-    );
+    // const generatedPermissions = await this.permissionCacheService.generateUserPermissionCache(
+    //   profile.id
+    // );
 
-    await this.auditRepository.save({
-      user_id: profile.id,
-      module_name: 'AUTH',
-      entity_name: 'PERMISSION_CACHE',
-      action: 'INITIAL_CACHE_GENERATED',
-      created_at: new Date(),
-    });
+    // await this.auditRepository.save({
+    //   user_id: profile.id,
+    //   module_name: 'AUTH',
+    //   entity_name: 'PERMISSION_CACHE',
+    //   action: 'INITIAL_CACHE_GENERATED',
+    //   created_at: new Date(),
+    // });
+
+    // await this.validateProvisioning(profile.id);
+
+    // const hasMenus = await this.navigationService.hasAvailableMenus(profile.id);
+
+    // if (!hasMenus) {
+    //   throw new BadRequestException('Provisioning inválido: no existen menús visibles');
+    // }
+
+    // await this.auditRepository.save({
+    //   user_id: profile.id,
+    //   module_name: 'AUTH',
+    //   entity_name: 'NAVIGATION',
+    //   action: 'MENU_PROVISIONED',
+    //   new_values: {
+    //     menuAccess: true,
+    //   },
+    //   created_at: new Date(),
+    // });
+
+    let guestAssigned = false;
+    let generatedPermissions = 0;
+
+    if (profileCreated) {
+      guestAssigned = await this.assignGuestRoleIfNeeded(profile.id);
+
+      generatedPermissions = await this.permissionCacheService.generateUserPermissionCache(
+        profile.id
+      );
+
+      await this.auditRepository.save({
+        user_id: profile.id,
+        module_name: 'AUTH',
+        entity_name: 'PERMISSION_CACHE',
+        action: 'INITIAL_CACHE_GENERATED',
+        created_at: new Date(),
+      });
+
+      await this.validateProvisioning(profile.id);
+
+      const hasMenus = await this.navigationService.hasAvailableMenus(profile.id);
+
+      if (!hasMenus) {
+        throw new BadRequestException('Provisioning inválido: no existen menús visibles');
+      }
+
+      await this.auditRepository.save({
+        user_id: profile.id,
+        module_name: 'AUTH',
+        entity_name: 'NAVIGATION',
+        action: 'MENU_PROVISIONED',
+        new_values: {
+          menuAccess: true,
+        },
+        created_at: new Date(),
+      });
+    }
 
     const authResult = await this.generatePlatformTokens(profile);
 

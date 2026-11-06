@@ -26,6 +26,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 
+import { NavigationModule } from '../navigation/navigation.module';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { UserProfile } from '../users/entities/user-profile.entity';
 import { PermissionsGuard } from './guards/permission.guard';
@@ -48,6 +49,7 @@ import { PermissionsGuard } from './guards/permission.guard';
       PermissionCache,
       UserProfile,
     ]),
+    NavigationModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
