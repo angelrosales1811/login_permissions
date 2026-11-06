@@ -15,6 +15,8 @@ import { AuditLog } from '../audit/entities/audit-log.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { RolePermission } from '../roles/entities/role-permission.entity';
+
+import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { RolesModule } from '../roles/roles.module';
 import { RefreshToken } from './entities/refresh-token.entity';
@@ -22,7 +24,6 @@ import { UserSession } from './entities/user-session.entity';
 import { RolesGuard } from './guards/roles.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-//import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 
 import { PermissionCacheService } from '../permissions/permission-cache.service';
@@ -39,6 +40,7 @@ import { PermissionsGuard } from './guards/permission.guard';
       RefreshToken,
       AuditLog,
       UserRole,
+      Role,
       RolePermission,
       Permission,
       Resource,
