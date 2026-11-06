@@ -414,7 +414,12 @@ export class AuthService {
 
       entity_name: 'USER_PROFILE',
 
-      action: 'GOOGLE_PROFILE_CREATED',
+      action: 'GOOGLE_REGISTER',
+
+      new_values: {
+        auth_user_id: savedProfile.auth_user_id,
+        email: savedProfile.email,
+      },
 
       created_at: new Date(),
     });
@@ -612,6 +617,22 @@ export class AuthService {
 
     const user = (await response.json()) as SupabaseOAuthUser;
 
+    // await this.auditRepository.save({
+    //   module_name: 'AUTH',
+
+    //   entity_name: 'GOOGLE_OAUTH',
+
+    //   action: 'OAUTH_CALLBACK',
+
+    //   new_values: {
+    //     auth_user_id: user.id,
+    //     email: user.email,
+    //     provider: 'google',
+    //   },
+
+    //   created_at: new Date(),
+    // });
+
     const existingProfile = await this.userProfileRepository.findOne({
       where: {
         auth_user_id: user.id,
@@ -636,6 +657,43 @@ export class AuthService {
           : undefined,
     });
 
+    await this.auditRepository.save({
+      user_id: profile.id,
+
+      module_name: 'AUTH',
+
+      entity_name: 'GOOGLE_OAUTH',
+
+      action: 'OAUTH_CALLBACK',
+
+      new_values: {
+        auth_user_id: user.id,
+        email: user.email,
+        provider: 'google',
+      },
+
+      created_at: new Date(),
+    });
+
+    if (profileCreated) {
+      await this.auditRepository.save({
+        user_id: profile.id,
+
+        module_name: 'AUTH',
+
+        entity_name: 'USER_PROFILE',
+
+        action: 'FIRST_ACCESS',
+
+        new_values: {
+          auth_user_id: profile.auth_user_id,
+          email: profile.email,
+        },
+
+        created_at: new Date(),
+      });
+    }
+
     const guestAssigned = await this.assignGuestRoleIfNeeded(profile.id);
 
     const generatedPermissions = await this.permissionCacheService.generateUserPermissionCache(
@@ -654,9 +712,18 @@ export class AuthService {
 
     await this.auditRepository.save({
       user_id: profile.id,
+
       module_name: 'AUTH',
+
       entity_name: 'JWT',
+
       action: 'GOOGLE_LOGIN',
+
+      new_values: {
+        session_id: authResult.sessionId,
+        email: profile.email,
+      },
+
       created_at: new Date(),
     });
 
