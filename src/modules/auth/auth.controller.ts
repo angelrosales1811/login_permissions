@@ -110,8 +110,8 @@ export class AuthController {
     status: 401,
     description: 'Token inválido o expirado',
   })
-  me(@CurrentUser() user: AuthUser): AuthUser {
-    return user;
+  async me(@CurrentUser() user: AuthUser) {
+    return this.authService.me(user);
   }
 
   @Get('me2')

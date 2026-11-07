@@ -984,8 +984,34 @@ export class AuthService {
     };
   }
 
-  me(user: { id: string; uid: string; email: string }) {
-    return user;
+  async me(user: {
+    id: string;
+    uid: string;
+    email: string;
+    roles?: string[];
+    permissions?: Record<string, Record<string, string[]>>;
+    sessionId?: string;
+  }) {
+    const profile = await this.userProfileRepository.findOne({
+      where: {
+        id: user.id,
+      },
+    });
+
+    return {
+      id: user.id,
+      uid: user.uid,
+      email: user.email,
+
+      fullName: profile?.full_name ?? null,
+      avatarUrl: profile?.avatar_url ?? null,
+
+      sessionId: user.sessionId,
+
+      roles: user.roles ?? [],
+
+      permissions: user.permissions ?? {},
+    };
   }
 
   async logout(userId: string, sessionId: string) {
