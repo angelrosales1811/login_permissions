@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { ResourcesService } from './resources.service';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { CreateResourceDto } from './dto/create-resource.dto';
+import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
+import { ResourcesService } from './resources.service';
 
 @Controller('resources')
 export class ResourcesController {
@@ -19,16 +20,16 @@ export class ResourcesController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.resourcesService.findOne(+id);
+    return this.resourcesService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateResourceDto: UpdateResourceDto) {
-    return this.resourcesService.update(+id, updateResourceDto);
+    return this.resourcesService.update(id, updateResourceDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.resourcesService.remove(+id);
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateResourceStatusDto) {
+    return this.resourcesService.updateStatus(id, dto.active);
   }
 }

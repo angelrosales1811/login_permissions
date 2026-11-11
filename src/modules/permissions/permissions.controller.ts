@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { PermissionsService } from './permissions.service';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { CreatePermissionDto } from './dto/create-permission.dto';
+import { UpdatePermissionStatusDto } from './dto/update-permission-status.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
+import { PermissionsService } from './permissions.service';
 
 @Controller('permissions')
 export class PermissionsController {
@@ -19,16 +20,16 @@ export class PermissionsController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.permissionsService.findOne(+id);
+    return this.permissionsService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updatePermissionDto: UpdatePermissionDto) {
-    return this.permissionsService.update(+id, updatePermissionDto);
+    return this.permissionsService.update(id, updatePermissionDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.permissionsService.remove(+id);
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body() dto: UpdatePermissionStatusDto) {
+    return this.permissionsService.updateStatus(id, dto.active);
   }
 }

@@ -1,26 +1,112 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import { InjectRepository } from '@nestjs/typeorm';
+
+import { Repository } from 'typeorm';
+
+import { Permission } from './entities/permission.entity';
+
+import { RolePermission } from '../roles/entities/role-permission.entity';
+
 import { CreatePermissionDto } from './dto/create-permission.dto';
+
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 
 @Injectable()
 export class PermissionsService {
-  create(createPermissionDto: CreatePermissionDto) {
-    return 'This action adds a new permission';
+  constructor(
+    @InjectRepository(Permission)
+    private readonly permissionRepository: Repository<Permission>,
+
+    @InjectRepository(RolePermission)
+    private readonly rolePermissionRepository: Repository<RolePermission>
+  ) {}
+
+  async create(dto: CreatePermissionDto): Promise<Permission> {
+    const exists = await this.permissionRepository.findOne({
+      where: {
+        internal_name: dto.internal_name,
+      },
+    });
+
+    if (exists) {
+      throw new ConflictException('El permiso ya existe');
+    }
+
+    return this.permissionRepository.save(
+      this.permissionRepository.create({
+        internal_name: dto.internal_name,
+        external_name: dto.external_name,
+        permission_code: dto.permission_code,
+        description: dto.description,
+        active: true,
+      })
+    );
   }
 
-  findAll() {
-    return `This action returns all permissions`;
+  async findAll(): Promise<Permission[]> {
+    return this.permissionRepository.find({
+      order: {
+        internal_name: 'ASC',
+      },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} permission`;
+  async findOne(id: string): Promise<Permission> {
+    const permission = await this.permissionRepository.findOne({
+      where: { id },
+    });
+
+    if (!permission) {
+      throw new NotFoundException(`Permission ${id} not found`);
+    }
+
+    return permission;
   }
 
-  update(id: number, updatePermissionDto: UpdatePermissionDto) {
-    return `This action updates a #${id} permission`;
+  private async validatePermissionCodeChange(permissionId: string): Promise<void> {
+    const count = await this.rolePermissionRepository.count({
+      where: {
+        permission_id: permissionId,
+        active: true,
+      },
+    });
+
+    if (count > 0) {
+      throw new BadRequestException(
+        'No es posible modificar permission_code porque ya está asignado a roles'
+      );
+    }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} permission`;
+  async update(id: string, dto: UpdatePermissionDto): Promise<Permission> {
+    const permission = await this.findOne(id);
+
+    if (dto.permission_code && dto.permission_code !== permission.permission_code) {
+      await this.validatePermissionCodeChange(id);
+    }
+
+    permission.internal_name = dto.internal_name ?? permission.internal_name;
+
+    permission.external_name = dto.external_name ?? permission.external_name;
+
+    permission.description = dto.description ?? permission.description;
+
+    permission.permission_code = dto.permission_code ?? permission.permission_code;
+
+    return this.permissionRepository.save(permission);
+  }
+
+  async updateStatus(id: string, active: boolean): Promise<Permission> {
+    const permission = await this.findOne(id);
+
+    permission.active = active;
+
+    return this.permissionRepository.save(permission);
   }
 }
