@@ -6,8 +6,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Permission } from '../permissions/entities/permission.entity';
 //import { PermissionCacheService } from '../permissions/permission-cache.service';
+import { ModuleResource } from '../modules/entities/module-resource.entity';
 import { Module as ModuleEntity } from '../modules/entities/module.entity';
 import { RoleModule } from '../modules/entities/role-module.entity';
+
 import { PermissionsModule } from '../permissions/permissions.module';
 import { Resource } from '../resources/entities/resource.entity';
 import { RolePermission } from './entities/role-permission.entity';
@@ -24,6 +26,7 @@ import { UserRole } from './entities/user-role.entity';
       Resource,
       ModuleEntity,
       RoleModule,
+      ModuleResource,
     ]),
     PermissionsModule,
   ],

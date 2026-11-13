@@ -22,6 +22,11 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
+  @Get('permission-matrix')
+  permissionMatrix() {
+    return this.rolesService.getPermissionMatrix();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.rolesService.findOne(id);

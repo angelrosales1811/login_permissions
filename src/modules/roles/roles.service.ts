@@ -7,13 +7,16 @@ import { Repository } from 'typeorm';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+
+import { ModuleResource } from '../modules/entities/module-resource.entity';
+import { Module as ModuleEntity } from '../modules/entities/module.entity';
+import { RoleModule } from '../modules/entities/role-module.entity';
+import { RolePermission } from './entities/role-permission.entity';
 import { Role } from './entities/role.entity';
 import { UserRole } from './entities/user-role.entity';
 
-import { RolePermission } from './entities/role-permission.entity';
+import { PermissionMatrixResponseDto } from './dto/permission-matrix-response.dto';
 
-import { Module as ModuleEntity } from '../modules/entities/module.entity';
-import { RoleModule } from '../modules/entities/role-module.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { Resource } from '../resources/entities/resource.entity';
 
@@ -48,7 +51,10 @@ export class RolesService {
     @InjectRepository(RoleModule)
     private readonly roleModuleRepository: Repository<RoleModule>,
 
-    private readonly permissionCacheService: PermissionCacheService
+    private readonly permissionCacheService: PermissionCacheService,
+
+    @InjectRepository(ModuleResource)
+    private readonly moduleResourceRepository: Repository<ModuleResource>
   ) {}
 
   async getUserRolesByUserId(userId: string): Promise<string[]> {
@@ -297,5 +303,95 @@ export class RolesService {
     }
 
     await this.permissionCacheService.invalidateByRole(roleId);
+  }
+
+  async getPermissionMatrix(): Promise<PermissionMatrixResponseDto[]> {
+    const roles = await this.roleRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const rolePermissions = await this.rolePermissionRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const permissions = await this.permissionRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const resources = await this.resourceRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const moduleResources = await this.moduleResourceRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const modules = await this.moduleRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    const matrix = new Map<string, PermissionMatrixResponseDto>();
+
+    for (const relation of rolePermissions) {
+      const role = roles.find((x) => x.id === relation.role_id);
+
+      if (!role) {
+        continue;
+      }
+
+      const resource = resources.find((x) => x.id === relation.resource_id);
+
+      if (!resource) {
+        continue;
+      }
+
+      const permission = permissions.find((x) => x.id === relation.permission_id);
+
+      if (!permission) {
+        continue;
+      }
+
+      const moduleRelation = moduleResources.find((x) => x.resource_id === resource.id);
+
+      if (!moduleRelation) {
+        continue;
+      }
+
+      const module = modules.find((x) => x.id === moduleRelation.module_id);
+
+      if (!module) {
+        continue;
+      }
+
+      const key = `${module.id}-${resource.id}-${role.id}`;
+
+      if (!matrix.has(key)) {
+        matrix.set(key, {
+          module: module.internal_name.toUpperCase(),
+
+          resource: resource.internal_name.toUpperCase(),
+
+          role: role.internal_name.toUpperCase(),
+
+          permissions: [],
+        });
+      }
+
+      matrix.get(key)!.permissions.push(permission.permission_code);
+    }
+
+    return Array.from(matrix.values());
   }
 }
