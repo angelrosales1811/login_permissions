@@ -11,7 +11,12 @@ export class RequestContextMiddleware implements NestMiddleware {
   use(request: Request, response: Response, next: NextFunction): void {
     this.requestContextService.clear();
 
-    const ip = request.ip ?? request.socket?.remoteAddress ?? null;
+    const forwarded = request.headers['x-forwarded-for'];
+
+    const ip =
+      typeof forwarded === 'string'
+        ? forwarded.split(',')[0].trim()
+        : (request.ip ?? request.socket.remoteAddress ?? null);
 
     this.requestContextService.setIp(ip);
 
