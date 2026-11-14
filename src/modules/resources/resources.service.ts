@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuditContextService } from '../../common/services/audit-context.service';
+import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { ModuleResource } from '../modules/entities/module-resource.entity';
 import { Module } from '../modules/entities/module.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
@@ -17,7 +19,11 @@ export class ResourcesService {
     private readonly moduleRepository: Repository<Module>,
 
     @InjectRepository(ModuleResource)
-    private readonly moduleResourceRepository: Repository<ModuleResource>
+    private readonly moduleResourceRepository: Repository<ModuleResource>,
+
+    private readonly auditContextService: AuditContextService,
+
+    private readonly auditEntityService: AuditEntityService
   ) {}
 
   // private async validateCanDisable(resourceId: string): Promise<void> {
@@ -55,16 +61,19 @@ export class ResourcesService {
       }
     }
 
-    const resource = await this.resourceRepository.save(
-      this.resourceRepository.create({
-        internal_name: dto.internal_name,
-        external_name: dto.external_name,
-        description: dto.description,
-        application_id: dto.application_id,
-        active: true,
-      })
-    );
+    const resource = this.resourceRepository.create({
+      internal_name: dto.internal_name,
+      external_name: dto.external_name,
+      description: dto.description,
+      application_id: dto.application_id,
+      active: true,
+    });
 
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyCreationAudit(resource, context);
+
+    await this.resourceRepository.save(resource);
     for (const moduleId of dto.module_ids) {
       const module = await this.moduleRepository.findOne({
         where: {
@@ -117,6 +126,10 @@ export class ResourcesService {
 
     resource.application_id = dto.application_id ?? resource.application_id;
 
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(resource, context);
+
     return this.resourceRepository.save(resource);
   }
 
@@ -124,6 +137,10 @@ export class ResourcesService {
     const resource = await this.findOne(id);
 
     resource.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(resource, context);
 
     return this.resourceRepository.save(resource);
   }

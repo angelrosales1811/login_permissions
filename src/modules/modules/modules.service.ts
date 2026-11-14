@@ -15,6 +15,9 @@ import { Module } from './entities/module.entity';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 
+import { AuditContextService } from '../../common/services/audit-context.service';
+import { AuditEntityService } from '../../common/services/audit-entity.service';
+
 @Injectable()
 export class ModulesService {
   constructor(
@@ -25,7 +28,11 @@ export class ModulesService {
     private readonly moduleResourceRepository: Repository<ModuleResource>,
 
     @InjectRepository(Resource)
-    private readonly resourceRepository: Repository<Resource>
+    private readonly resourceRepository: Repository<Resource>,
+
+    private readonly auditContextService: AuditContextService,
+
+    private readonly auditEntityService: AuditEntityService
   ) {}
 
   private async validateModuleCanBeDisabled(moduleId: string): Promise<void> {
@@ -74,6 +81,10 @@ export class ModulesService {
       active: true,
     });
 
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyCreationAudit(module, context);
+
     return this.moduleRepository.save(module);
   }
 
@@ -109,6 +120,10 @@ export class ModulesService {
     module.icon = dto.icon ?? module.icon;
 
     module.display_order = dto.display_order ?? module.display_order;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(module, context);
     return this.moduleRepository.save(module);
   }
 
@@ -120,6 +135,10 @@ export class ModulesService {
     }
 
     module.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(module, context);
 
     return this.moduleRepository.save(module);
   }

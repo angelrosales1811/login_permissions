@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
 
-//import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -22,6 +21,8 @@ import { Resource } from '../resources/entities/resource.entity';
 
 import { UpdateRoleModulesDto } from './dto/update-role-modules.dto';
 
+import { AuditContextService } from '../../common/services/audit-context.service';
+import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 
 @Injectable()
@@ -54,7 +55,11 @@ export class RolesService {
     private readonly permissionCacheService: PermissionCacheService,
 
     @InjectRepository(ModuleResource)
-    private readonly moduleResourceRepository: Repository<ModuleResource>
+    private readonly moduleResourceRepository: Repository<ModuleResource>,
+
+    private readonly auditContextService: AuditContextService,
+
+    private readonly auditEntityService: AuditEntityService
   ) {}
 
   async getUserRolesByUserId(userId: string): Promise<string[]> {
@@ -98,6 +103,8 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto): Promise<Role> {
+    console.log(this.auditContextService.getContext());
+
     const exists = await this.roleRepository.findOne({
       where: {
         internal_name: dto.internal_name,
@@ -108,14 +115,18 @@ export class RolesService {
       throw new ConflictException('El rol ya existe');
     }
 
-    return this.roleRepository.save(
-      this.roleRepository.create({
-        internal_name: dto.internal_name,
-        external_name: dto.external_name,
-        description: dto.description,
-        active: true,
-      })
-    );
+    const role = this.roleRepository.create({
+      internal_name: dto.internal_name,
+      external_name: dto.external_name,
+      description: dto.description,
+      active: true,
+    });
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyCreationAudit(role, context);
+
+    return this.roleRepository.save(role);
   }
 
   async findAll(): Promise<Role[]> {
@@ -147,6 +158,10 @@ export class RolesService {
 
     role.description = dto.description ?? role.description;
 
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(role, context);
+
     return this.roleRepository.save(role);
   }
 
@@ -175,6 +190,7 @@ export class RolesService {
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto): Promise<void> {
     await this.findOne(roleId);
+    const context = this.auditContextService.getContext();
 
     for (const item of dto.permissions) {
       const resource = await this.resourceRepository.findOne({
@@ -221,18 +237,24 @@ export class RolesService {
       if (exists) {
         exists.active = true;
 
+        this.auditEntityService.applyUpdateAudit(exists, context);
+
         await this.rolePermissionRepository.save(exists);
 
         continue;
       }
 
-      await this.rolePermissionRepository.save({
+      const relation = this.rolePermissionRepository.create({
         role_id: roleId,
         resource_id: item.resourceId,
         permission_id: item.permissionId,
         application_id: item.applicationId,
         active: true,
       });
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      await this.rolePermissionRepository.save(relation);
     }
 
     await this.permissionCacheService.invalidateByRole(roleId);
@@ -251,6 +273,7 @@ export class RolesService {
 
   async updateRoleModules(roleId: string, dto: UpdateRoleModulesDto): Promise<void> {
     await this.findOne(roleId);
+    const context = this.auditContextService.getContext();
 
     for (const moduleId of dto.moduleIds) {
       const module = await this.moduleRepository.findOne({
@@ -289,17 +312,23 @@ export class RolesService {
       if (exists) {
         exists.active = true;
 
+        this.auditEntityService.applyUpdateAudit(exists, context);
+
         await this.roleModuleRepository.save(exists);
 
         continue;
       }
 
-      await this.roleModuleRepository.save({
+      const relation = this.roleModuleRepository.create({
         role_id: roleId,
         module_id: moduleId,
         application_id: module?.application_id,
         active: true,
       });
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      await this.roleModuleRepository.save(relation);
     }
 
     await this.permissionCacheService.invalidateByRole(roleId);

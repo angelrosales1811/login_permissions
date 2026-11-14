@@ -42,26 +42,37 @@ export class Application {
   @Column({
     nullable: true,
   })
-  user_action?: string;
-
-  @Column({
-    type: 'timestamptz',
-  })
-  creation_time!: Date;
-
-  @Column({
-    type: 'timestamptz',
-    nullable: true,
-  })
-  update_time?: Date;
-
-  @Column({
-    nullable: true,
-  })
-  ip?: string;
-
-  @Column({
-    nullable: true,
-  })
   module?: string;
+
+  @Column({
+    nullable: true,
+  })
+  created_by?: string;
+
+  @Column({
+    type: 'timestamptz',
+    nullable: true,
+  })
+  created_at?: Date;
+
+  @Column({
+    nullable: true,
+  })
+  updated_by?: string;
+
+  @Column({
+    type: 'timestamptz',
+    nullable: true,
+  })
+  updated_at?: Date;
+
+  @Column({
+    nullable: true,
+  })
+  ip_creation?: string;
+
+  @Column({
+    nullable: true,
+  })
+  ip_update?: string;
 }

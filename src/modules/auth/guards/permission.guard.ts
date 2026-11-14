@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 
 import { Reflector } from '@nestjs/core';
+
 import { AuthUser } from '../interfaces/auth-user.interface';
 
 interface PermissionMetadata {
@@ -12,6 +13,26 @@ interface PermissionMetadata {
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
+
+  private hasPermissionLevel(userPermissions: string[], requiredPermission: string): boolean {
+    if (userPermissions.includes('777')) {
+      return true;
+    }
+
+    switch (requiredPermission) {
+      case '444':
+        return userPermissions.some((permission) => ['444', '644', '755'].includes(permission));
+
+      case '644':
+        return userPermissions.some((permission) => ['644', '755'].includes(permission));
+
+      case '755':
+        return userPermissions.includes('755');
+
+      default:
+        return userPermissions.includes(requiredPermission);
+    }
+  }
 
   canActivate(context: ExecutionContext): boolean {
     const metadata = this.reflector.getAllAndOverride<PermissionMetadata>('permission', [
@@ -43,7 +64,7 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Resource denied');
     }
 
-    const hasPermission = resourcePermissions.includes(permissionCode);
+    const hasPermission = this.hasPermissionLevel(resourcePermissions, permissionCode);
 
     if (!hasPermission) {
       throw new ForbiddenException('Permission denied');

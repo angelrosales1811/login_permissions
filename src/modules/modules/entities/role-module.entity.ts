@@ -21,4 +21,36 @@ export class RoleModule {
     default: true,
   })
   active!: boolean;
+
+  @Column({
+    nullable: true,
+  })
+  created_by?: string;
+
+  @Column({
+    type: 'timestamptz',
+    nullable: true,
+  })
+  created_at?: Date;
+
+  @Column({
+    nullable: true,
+  })
+  updated_by?: string;
+
+  @Column({
+    type: 'timestamptz',
+    nullable: true,
+  })
+  updated_at?: Date;
+
+  @Column({
+    nullable: true,
+  })
+  ip_creation?: string;
+
+  @Column({
+    nullable: true,
+  })
+  ip_update?: string;
 }

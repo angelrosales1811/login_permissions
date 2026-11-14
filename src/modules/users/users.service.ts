@@ -5,6 +5,8 @@ import { UserProfile } from './entities/user-profile.entity';
 
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AuditContextService } from '../../common/services/audit-context.service';
+import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
@@ -22,7 +24,11 @@ export class UsersService {
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
 
-    private readonly permissionCacheService: PermissionCacheService
+    private readonly permissionCacheService: PermissionCacheService,
+
+    private readonly auditContextService: AuditContextService,
+
+    private readonly auditEntityService: AuditEntityService
   ) {}
 
   create(createUserDto: CreateUserDto) {
@@ -56,6 +62,7 @@ export class UsersService {
 
   async updateUserRoles(userId: string, dto: UpdateUserRolesDto): Promise<void> {
     await this.findOne(userId);
+    const context = this.auditContextService.getContext();
 
     for (const roleId of dto.roleIds) {
       const role = await this.roleRepository.findOne({
@@ -90,16 +97,26 @@ export class UsersService {
       if (exists) {
         exists.active = true;
 
+        this.auditEntityService.applyUpdateAudit(exists, context);
+
         await this.userRoleRepository.save(exists);
 
         continue;
       }
 
-      await this.userRoleRepository.save({
+      const relation = this.userRoleRepository.create({
         user_id: userId,
         role_id: roleId,
         active: true,
       });
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      await this.userRoleRepository.save(relation);
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      await this.userRoleRepository.save(relation);
     }
 
     await this.permissionCacheService.invalidateUser(userId);

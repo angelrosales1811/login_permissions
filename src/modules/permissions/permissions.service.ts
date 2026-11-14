@@ -17,6 +17,10 @@ import { CreatePermissionDto } from './dto/create-permission.dto';
 
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 
+import { AuditContextService } from '../../common/services/audit-context.service';
+
+import { AuditEntityService } from '../../common/services/audit-entity.service';
+
 @Injectable()
 export class PermissionsService {
   constructor(
@@ -24,7 +28,10 @@ export class PermissionsService {
     private readonly permissionRepository: Repository<Permission>,
 
     @InjectRepository(RolePermission)
-    private readonly rolePermissionRepository: Repository<RolePermission>
+    private readonly rolePermissionRepository: Repository<RolePermission>,
+    private readonly auditContextService: AuditContextService,
+
+    private readonly auditEntityService: AuditEntityService
   ) {}
 
   async create(dto: CreatePermissionDto): Promise<Permission> {
@@ -38,15 +45,29 @@ export class PermissionsService {
       throw new ConflictException('El permiso ya existe');
     }
 
-    return this.permissionRepository.save(
-      this.permissionRepository.create({
-        internal_name: dto.internal_name,
-        external_name: dto.external_name,
-        permission_code: dto.permission_code,
-        description: dto.description,
-        active: true,
-      })
-    );
+    const codeExists = await this.permissionRepository.findOne({
+      where: {
+        permission_code: dto.permission_code.trim().toUpperCase(),
+      },
+    });
+
+    if (codeExists) {
+      throw new ConflictException('El código de permiso ya existe');
+    }
+
+    const permission = this.permissionRepository.create({
+      internal_name: dto.internal_name.trim().toUpperCase(),
+      external_name: dto.external_name,
+      permission_code: dto.permission_code.trim().toUpperCase(),
+      description: dto.description,
+      active: true,
+    });
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyCreationAudit(permission, context);
+
+    return this.permissionRepository.save(permission);
   }
 
   async findAll(): Promise<Permission[]> {
@@ -97,7 +118,13 @@ export class PermissionsService {
 
     permission.description = dto.description ?? permission.description;
 
-    permission.permission_code = dto.permission_code ?? permission.permission_code;
+    permission.permission_code = dto.permission_code
+      ? dto.permission_code.trim().toUpperCase()
+      : permission.permission_code;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(permission, context);
 
     return this.permissionRepository.save(permission);
   }
@@ -106,6 +133,10 @@ export class PermissionsService {
     const permission = await this.findOne(id);
 
     permission.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(permission, context);
 
     return this.permissionRepository.save(permission);
   }

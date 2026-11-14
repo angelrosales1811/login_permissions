@@ -314,9 +314,17 @@ export class AuthService {
       return cache;
     }
 
-    console.error(`RBAC CACHE MISS FOR USER ${userId}`);
+    console.warn(`RBAC CACHE MISS FOR USER ${userId}`);
 
-    throw new BadRequestException('Permission cache not generated');
+    const rows = await this.permissionCacheService.generateUserPermissionCache(userId);
+
+    if (rows === 0) {
+      return {};
+    }
+
+    const regeneratedCache = await this.loadPermissionCache(userId);
+
+    return regeneratedCache ?? {};
   }
 
   private async generatePlatformTokens(profile: UserProfile) {

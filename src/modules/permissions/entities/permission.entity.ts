@@ -33,16 +33,13 @@ export class Permission {
   created_by?: string;
 
   @Column({
+    type: 'timestamptz',
     nullable: true,
   })
   created_at?: Date;
 
   @Column({
-    nullable: true,
-  })
-  updated_by?: string;
-
-  @Column({
+    type: 'timestamptz',
     nullable: true,
   })
   updated_at?: Date;
