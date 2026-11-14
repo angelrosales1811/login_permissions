@@ -32,6 +32,7 @@ export class UsersService {
   ) {}
 
   create(createUserDto: CreateUserDto) {
+    console.log('createUserDto', createUserDto);
     return 'This action adds a new user';
   }
 
@@ -113,16 +114,13 @@ export class UsersService {
       this.auditEntityService.applyCreationAudit(relation, context);
 
       await this.userRoleRepository.save(relation);
-
-      this.auditEntityService.applyCreationAudit(relation, context);
-
-      await this.userRoleRepository.save(relation);
     }
 
-    await this.permissionCacheService.invalidateUser(userId);
+    await this.permissionCacheService.rebuildUserPermissionCache(userId);
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {
+    console.log('updateUserDto', updateUserDto);
     return `This action updates a #${id} user`;
   }
 }

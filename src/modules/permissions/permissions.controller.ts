@@ -26,6 +26,12 @@ export class PermissionsController {
     return this.permissionsService.findAll();
   }
 
+  @Get('cache-health')
+  @Permissions('IAM', 'PERMISSIONS', '444')
+  cacheHealth() {
+    return this.permissionsService.cacheHealth();
+  }
+
   @Get(':id')
   @Permissions('IAM', 'PERMISSIONS', '444')
   findOne(@Param('id') id: string) {
@@ -42,5 +48,20 @@ export class PermissionsController {
   @Permissions('IAM', 'PERMISSIONS', '777')
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePermissionStatusDto) {
     return this.permissionsService.updateStatus(id, dto.active);
+  }
+
+  @Post('cache/rebuild-user/:userId')
+  @Permissions('IAM', 'PERMISSIONS', '777')
+  rebuildUserCache(
+    @Param('userId')
+    userId: string
+  ) {
+    return this.permissionsService.rebuildUserCache(userId);
+  }
+
+  @Post('cache/rebuild-all')
+  @Permissions('IAM', 'PERMISSIONS', '777')
+  rebuildAllCaches() {
+    return this.permissionsService.rebuildAllCaches();
   }
 }

@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 
 import { RolePermission } from '../roles/entities/role-permission.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
+import { UserProfile } from '../users/entities/user-profile.entity';
+
 import { PermissionCache } from './entities/permission-cache.entity';
 import { Permission } from './entities/permission.entity';
 
@@ -21,7 +23,10 @@ export class PermissionCacheService {
     private readonly rolePermissionRepository: Repository<RolePermission>,
 
     @InjectRepository(Permission)
-    private readonly permissionRepository: Repository<Permission>
+    private readonly permissionRepository: Repository<Permission>,
+
+    @InjectRepository(UserProfile)
+    private readonly userProfileRepository: Repository<UserProfile>
   ) {}
 
   async invalidateUser(userId: string): Promise<void> {
@@ -70,6 +75,29 @@ export class PermissionCacheService {
 
     for (const roleId of roleIds) {
       await this.invalidateByRole(roleId);
+    }
+  }
+
+  async rebuildUserPermissionCache(userId: string): Promise<number> {
+    console.log(`[RBAC] rebuilding user ${userId}`);
+    await this.invalidateUser(userId);
+
+    return this.generateUserPermissionCache(userId);
+  }
+
+  async rebuildUsersByRole(roleId: string): Promise<void> {
+    console.log(`[RBAC] rebuilding role ${roleId}`);
+    const userRoles = await this.userRoleRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    const userIds = userRoles.map((item) => item.user_id);
+
+    for (const userId of userIds) {
+      await this.rebuildUserPermissionCache(userId);
     }
   }
 
@@ -141,5 +169,76 @@ export class PermissionCacheService {
     }
 
     return cacheRows.length;
+  }
+
+  async ensureUserCache(userId: string): Promise<boolean> {
+    const count = await this.permissionCacheRepository.count({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    return count > 0;
+  }
+
+  async hasUserCache(userId: string): Promise<boolean> {
+    const count = await this.permissionCacheRepository.count({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    return count > 0;
+  }
+
+  async repairUserCache(userId: string): Promise<number> {
+    return this.rebuildUserPermissionCache(userId);
+  }
+
+  async rebuildAllCaches(): Promise<{
+    processed: number;
+  }> {
+    const users = await this.userProfileRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    for (const user of users) {
+      await this.rebuildUserPermissionCache(user.id);
+    }
+
+    return {
+      processed: users.length,
+    };
+  }
+
+  async getCacheHealth() {
+    const users = await this.userProfileRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    let usersWithCache = 0;
+    let usersWithoutCache = 0;
+
+    for (const user of users) {
+      const hasCache = await this.hasUserCache(user.id);
+
+      if (hasCache) {
+        usersWithCache++;
+      } else {
+        usersWithoutCache++;
+      }
+    }
+
+    return {
+      totalUsers: users.length,
+      usersWithCache,
+      usersWithoutCache,
+    };
   }
 }

@@ -209,122 +209,30 @@ export class AuthService {
     }
   }
 
-  ////////Justificación
-  ////////La construcción del cache debe tener un único responsable: PermissionCacheService
-
-  // private async getUserPermissions(
-  //   userId: string
-  // ): Promise<Record<string, Record<string, string[]>>> {
-  //   const cache = await this.loadPermissionCache(userId);
-
-  //   if (cache) {
-  //     console.log('RBAC CACHE HIT');
-
-  //     return cache;
-  //   }
-  //   const userRoles = await this.userRoleRepository.find({
-  //     where: {
-  //       user_id: userId,
-  //       active: true,
-  //     },
-  //   });
-
-  //   if (!userRoles.length) {
-  //     return {};
-  //   }
-
-  //   const roleIds = userRoles.map((role) => role.role_id);
-
-  //   const rolePermissions = await this.rolePermissionRepository.find({
-  //     where: {
-  //       active: true,
-  //     },
-  //   });
-
-  //   const filteredPermissions = rolePermissions.filter((rp) => roleIds.includes(rp.role_id));
-
-  //   await this.savePermissionCache(userId, filteredPermissions);
-
-  //   const result: Record<string, Record<string, string[]>> = {};
-
-  //   for (const item of filteredPermissions) {
-  //     const permission = await this.permissionRepository.findOne({
-  //       where: {
-  //         id: item.permission_id,
-  //         active: true,
-  //       },
-  //     });
-
-  //     if (!permission) {
-  //       continue;
-  //     }
-
-  //     const resource = await this.resourceRepository.findOne({
-  //       where: {
-  //         id: item.resource_id,
-  //         active: true,
-  //       },
-  //     });
-
-  //     if (!resource) {
-  //       continue;
-  //     }
-
-  //     const application = await this.applicationRepository.findOne({
-  //       where: {
-  //         id: item.application_id,
-  //         active: true,
-  //       },
-  //     });
-
-  //     if (!application) {
-  //       continue;
-  //     }
-
-  //     const applicationKey = application.code;
-
-  //     const resourceKey = resource.internal_name;
-
-  //     const action = permission.permission_code;
-
-  //     if (!result[applicationKey]) {
-  //       result[applicationKey] = {};
-  //     }
-
-  //     if (!result[applicationKey][resourceKey]) {
-  //       result[applicationKey][resourceKey] = [];
-  //     }
-
-  //     if (!result[applicationKey][resourceKey].includes(action)) {
-  //       result[applicationKey][resourceKey].push(action);
-  //     }
-  //   }
-
-  //   return result;
-  // }
-
   private async getUserPermissions(
     userId: string
   ): Promise<Record<string, Record<string, string[]>>> {
     const cache = await this.loadPermissionCache(userId);
 
     if (cache) {
-      console.log('RBAC CACHE HIT');
+      console.log(`[RBAC] CACHE HIT ${userId}`);
 
       return cache;
     }
 
-    console.warn(`RBAC CACHE MISS FOR USER ${userId}`);
+    console.warn(`[RBAC] CACHE MISS ${userId}`);
 
-    const rows = await this.permissionCacheService.generateUserPermissionCache(userId);
+    const rebuilt = await this.permissionCacheService.rebuildUserPermissionCache(userId);
 
-    if (rows === 0) {
-      return {};
+    if (rebuilt === 0) {
+      throw new UnauthorizedException('User without permissions');
     }
 
-    const regeneratedCache = await this.loadPermissionCache(userId);
+    console.warn(`[RBAC] CACHE RECOVERED ${userId}`);
 
-    return regeneratedCache ?? {};
+    const repairedCache = await this.loadPermissionCache(userId);
+
+    return repairedCache ?? {};
   }
 
   private async generatePlatformTokens(profile: UserProfile) {
@@ -726,39 +634,6 @@ export class AuthService {
         created_at: new Date(),
       });
     }
-
-    // const guestAssigned = await this.assignGuestRoleIfNeeded(profile.id); ///////////////////////
-
-    // const generatedPermissions = await this.permissionCacheService.generateUserPermissionCache(
-    //   profile.id
-    // );
-
-    // await this.auditRepository.save({
-    //   user_id: profile.id,
-    //   module_name: 'AUTH',
-    //   entity_name: 'PERMISSION_CACHE',
-    //   action: 'INITIAL_CACHE_GENERATED',
-    //   created_at: new Date(),
-    // });
-
-    // await this.validateProvisioning(profile.id);
-
-    // const hasMenus = await this.navigationService.hasAvailableMenus(profile.id);
-
-    // if (!hasMenus) {
-    //   throw new BadRequestException('Provisioning inválido: no existen menús visibles');
-    // }
-
-    // await this.auditRepository.save({
-    //   user_id: profile.id,
-    //   module_name: 'AUTH',
-    //   entity_name: 'NAVIGATION',
-    //   action: 'MENU_PROVISIONED',
-    //   new_values: {
-    //     menuAccess: true,
-    //   },
-    //   created_at: new Date(),
-    // });
 
     let guestAssigned = false;
     let generatedPermissions = 0;

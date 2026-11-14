@@ -172,7 +172,7 @@ export class RolesService {
 
     const updated = await this.roleRepository.save(role);
 
-    await this.permissionCacheService.invalidateByRole(id);
+    await this.permissionCacheService.rebuildUsersByRole(id);
 
     return updated;
   }
@@ -190,6 +190,10 @@ export class RolesService {
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto): Promise<void> {
     await this.findOne(roleId);
+    if (!dto.permissions.length) {
+      throw new ConflictException('La matriz de permisos no puede quedar vacía');
+    }
+
     const context = this.auditContextService.getContext();
 
     for (const item of dto.permissions) {
@@ -230,11 +234,14 @@ export class RolesService {
         where: {
           role_id: roleId,
           resource_id: item.resourceId,
-          permission_id: item.permissionId,
         },
       });
 
       if (exists) {
+        exists.permission_id = item.permissionId;
+
+        exists.application_id = item.applicationId;
+
         exists.active = true;
 
         this.auditEntityService.applyUpdateAudit(exists, context);
@@ -257,7 +264,7 @@ export class RolesService {
       await this.rolePermissionRepository.save(relation);
     }
 
-    await this.permissionCacheService.invalidateByRole(roleId);
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
   }
 
   async getRoleModules(roleId: string): Promise<RoleModule[]> {
@@ -331,7 +338,7 @@ export class RolesService {
       await this.roleModuleRepository.save(relation);
     }
 
-    await this.permissionCacheService.invalidateByRole(roleId);
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
   }
 
   async getPermissionMatrix(): Promise<PermissionMatrixResponseDto[]> {

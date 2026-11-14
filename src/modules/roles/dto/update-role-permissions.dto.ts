@@ -20,6 +20,8 @@ export class RolePermissionItemDto {
 export class UpdateRolePermissionsDto {
   @ApiProperty({
     type: [RolePermissionItemDto],
+    description:
+      'Matriz completa de permisos del rol. Los recursos no presentes serán desactivados.',
   })
   @IsArray()
   @ValidateNested({ each: true })

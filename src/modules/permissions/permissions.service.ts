@@ -21,11 +21,15 @@ import { AuditContextService } from '../../common/services/audit-context.service
 
 import { AuditEntityService } from '../../common/services/audit-entity.service';
 
+import { PermissionCacheService } from './permission-cache.service';
+
 @Injectable()
 export class PermissionsService {
   constructor(
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
+
+    private readonly permissionCacheService: PermissionCacheService,
 
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepository: Repository<RolePermission>,
@@ -139,5 +143,22 @@ export class PermissionsService {
     this.auditEntityService.applyUpdateAudit(permission, context);
 
     return this.permissionRepository.save(permission);
+  }
+
+  async cacheHealth() {
+    return this.permissionCacheService.getCacheHealth();
+  }
+
+  async rebuildUserCache(userId: string) {
+    const rebuilt = await this.permissionCacheService.repairUserCache(userId);
+
+    return {
+      userId,
+      rebuilt,
+    };
+  }
+
+  async rebuildAllCaches() {
+    return this.permissionCacheService.rebuildAllCaches();
   }
 }
