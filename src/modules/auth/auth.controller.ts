@@ -10,7 +10,6 @@ import {
 } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
-import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -18,8 +17,6 @@ import { AuthUser } from './interfaces/auth-user.interface';
 
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LogoutResponseDto } from './dto/logout-response.dto';
-import { MeResponseDto } from './dto/me-response.dto';
-import { RefreshResponseDto } from './dto/refresh-response.dto';
 
 import { OAuthUrlResponseDto } from './dto/oauth-url-response.dto';
 //import { SocialLoginResponseDto } from './dto/social-login-response.dto';
@@ -35,7 +32,25 @@ export class AuthController {
   @Get('google')
   @ApiOperation({
     summary: 'Iniciar autenticación Google',
-    description: 'Genera la URL OAuth de Supabase para autenticar usuarios mediante Google.',
+    description: `
+      Genera una URL OAuth de Google utilizando Supabase.
+
+      Flujo:
+
+      Google OAuth
+      ↓
+      Frontend
+      ↓
+      GET /auth/google
+      ↓
+      Google Login
+      ↓
+      POST /auth/google/callback
+      ↓
+      JWT Plataforma
+
+      No requiere autenticación previa.
+    `,
   })
   @ApiResponse({
     status: 200,
@@ -49,6 +64,26 @@ export class AuthController {
   @Post('google/callback')
   @ApiOperation({
     summary: 'Procesar callback Google OAuth',
+    description: `
+      Recibe el access token entregado por Google a través de Supabase.
+
+      Responsabilidades:
+
+      - Crear perfil si no existe
+      - Asignar rol Guest inicial
+      - Generar Permission Cache
+      - Generar JWT
+      - Crear sesión
+
+      No requiere JWT previo.
+      `,
+  })
+  @ApiBody({
+    schema: {
+      example: {
+        accessToken: 'eyJhbGciOi...',
+      },
+    },
   })
   @ApiResponse({
     status: 200,
@@ -65,17 +100,44 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Autenticar usuario',
-    description:
-      'Valida las credenciales del usuario y genera un JWT para consumir los endpoints protegidos de la API.',
+    description: `
+      Autentica un usuario utilizando credenciales almacenadas en Supabase.
+
+      El proceso realiza:
+
+      1. Validación de credenciales
+      2. Obtención de Permission Cache
+      3. Recuperación automática del cache si fue eliminado
+      4. Generación de JWT
+      5. Generación de Refresh Token
+      6. Creación de sesión
+
+      RBAC:
+      Los permisos incluidos en el JWT provienen de permission_cache.
+      `,
   })
   @ApiBody({
-    type: LoginDto,
-    description: 'Credenciales de acceso del usuario',
+    description: 'Credenciales de acceso',
+    schema: {
+      example: {
+        email: 'admin@crm.com',
+        password: 'Password123',
+      },
+    },
   })
   @ApiResponse({
     status: 200,
     description: 'Autenticación exitosa',
-    type: LoginResponseDto,
+    schema: {
+      example: {
+        accessToken: 'jwt-token',
+        refreshToken: 'refresh-token',
+        user: {
+          uid: 'ad07de09-1a68-4cc2-a944-75a555433beb',
+          email: 'admin@crm.com',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 400,
@@ -98,13 +160,38 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Obtener usuario autenticado',
-    description:
-      'Devuelve la información básica del usuario asociada al JWT enviado en la petición.',
+    description: `
+      Retorna la información contenida en el JWT activo.
+
+      Incluye:
+
+      - Perfil
+      - Roles
+      - Permisos RBAC
+      - SessionId
+
+      Utilizado para validar autenticación y autorización.
+      `,
   })
   @ApiResponse({
     status: 200,
     description: 'Información del usuario autenticado',
-    type: MeResponseDto,
+    schema: {
+      example: {
+        id: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
+        uid: 'ad07de09-1a68-4cc2-a944-75a555433beb',
+        email: 'admin@crm.com',
+        fullName: 'Administrador Sistema',
+        sessionId: '28c9b618-e4e8-492a-8070-abb5540e394b',
+        roles: ['ADMINISTRATOR', 'IAM_ADMIN'],
+        permissions: {
+          IAM: {
+            PERMISSIONS: ['444'],
+            IAM_USERS: ['810'],
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -114,23 +201,44 @@ export class AuthController {
     return this.authService.me(user);
   }
 
-  @Get('me2')
-  @UseGuards(JwtAuthGuard)
-  getProfile(@CurrentUser() user: AuthUser) {
-    return user;
-  }
+  // @Get('me2')
+  // @UseGuards(JwtAuthGuard)
+  // getProfile(@CurrentUser() user: AuthUser) {
+  //   return user;
+  // }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Renovar Access Token',
-    description:
-      'Recibe un Refresh Token válido y genera un nuevo Access Token junto con un nuevo Refresh Token.',
+    description: `
+      Renueva el Access Token utilizando un Refresh Token válido.
+
+      El nuevo JWT conserva:
+
+      - Roles
+      - Permisos RBAC
+      - SessionId
+
+      La sesión debe permanecer activa.
+
+`,
+  })
+  @ApiBody({
+    schema: {
+      example: {
+        refreshToken: 'eyJhbGciOi...',
+      },
+    },
   })
   @ApiResponse({
     status: 200,
-    description: 'Token renovado correctamente',
-    type: RefreshResponseDto,
+    schema: {
+      example: {
+        accessToken: 'new-jwt',
+        refreshToken: 'new-refresh-token',
+      },
+    },
   })
   @ApiResponse({
     status: 401,
@@ -153,8 +261,18 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Cerrar sesión',
-    description:
-      'Cierra la sesión activa del usuario autenticado, marca la sesión como inactiva y revoca todos los Refresh Tokens vigentes.',
+    description: `
+      Cierra la sesión actual.
+
+      Acciones realizadas:
+
+      - Marca UserSession como inactiva
+      - Revoca Refresh Tokens asociados
+      - Registra evento de auditoría
+
+      Requiere JWT.
+      
+      `,
   })
   @ApiResponse({
     status: 200,
@@ -168,10 +286,26 @@ export class AuthController {
   logout(@CurrentUser() user: AuthUser) {
     return this.authService.logout(user.id, user.sessionId);
   }
+
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Cerrar todas las sesiones',
+    description: `
+      Revoca todas las sesiones activas del usuario.
+
+      Acciones:
+
+      - Cierra todas las UserSessions activas
+      - Revoca todos los Refresh Tokens
+      - Registra auditoría
+
+      Útil para recuperación de cuenta o cierre global.
+      
+      `,
+  })
   logoutAll(@CurrentUser() user: AuthUser) {
     return this.authService.logoutAll(user.id);
   }

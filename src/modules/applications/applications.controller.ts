@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
@@ -13,6 +13,7 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 
 @ApiTags('Applications')
+@ApiBearerAuth('JWT-auth')
 @Controller('applications')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ApplicationsController {
@@ -22,6 +23,47 @@ export class ApplicationsController {
   @Permissions('IAM', 'APPLICATIONS', '755')
   @ApiOperation({
     summary: 'Crear aplicación',
+    description: `
+    Crea una nueva aplicación dentro de la plataforma.
+
+    Ejemplos:
+
+    IAM
+    CRM
+    PORTAL
+
+    Las aplicaciones representan el nivel superior del modelo RBAC.
+
+    Jerarquía:
+
+    Application
+    ↓
+    Module
+    ↓
+    Resource
+    ↓
+    Permission
+    ↓
+    Role
+    ↓
+    JWT
+
+    Permiso requerido:
+
+    IAM / APPLICATIONS / 755
+    `,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Aplicación creada correctamente',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Permisos insuficientes',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'La aplicación ya existe',
   })
   create(@Body() dto: CreateApplicationDto) {
     return this.applicationsService.create(dto);
@@ -31,6 +73,25 @@ export class ApplicationsController {
   @Permissions('IAM', 'APPLICATIONS', '444')
   @ApiOperation({
     summary: 'Obtener aplicaciones',
+    description: `
+    Obtiene todas las aplicaciones registradas.
+
+    Utilizado por:
+
+    - Administración IAM
+    - Módulos
+    - Recursos
+    - Matriz RBAC
+    - Menú dinámico
+
+    Permiso requerido:
+
+    IAM / APPLICATIONS / 444
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de aplicaciones obtenido correctamente',
   })
   findAll() {
     return this.applicationsService.findAll();
@@ -39,7 +100,34 @@ export class ApplicationsController {
   @Get(':id')
   @Permissions('IAM', 'APPLICATIONS', '444')
   @ApiOperation({
-    summary: 'Obtener aplicación por id',
+    summary: 'Obtener aplicación por ID',
+    description: `
+    Consulta el detalle de una aplicación específica.
+
+    La información incluye:
+
+    - Código
+    - Nombre
+    - Ruta
+    - Estado
+    - Datos de auditoría
+
+    Permiso requerido:
+
+    IAM / APPLICATIONS / 444
+    `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID de la aplicación',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Aplicación encontrada',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Aplicación no encontrada',
   })
   findOne(@Param('id') id: string) {
     return this.applicationsService.findOne(id);
@@ -49,6 +137,35 @@ export class ApplicationsController {
   @Permissions('IAM', 'APPLICATIONS', '644')
   @ApiOperation({
     summary: 'Actualizar aplicación',
+    description: `
+    Permite modificar la configuración funcional de una aplicación.
+
+    Puede actualizar:
+
+    - code
+    - name
+    - description
+    - icon
+    - route
+
+    No modifica permisos ni asignaciones RBAC.
+
+    Permiso requerido:
+
+    IAM / APPLICATIONS / 644
+    `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID de la aplicación',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Aplicación actualizada correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Aplicación no encontrada',
   })
   update(@Param('id') id: string, @Body() dto: UpdateApplicationDto) {
     return this.applicationsService.update(id, dto);
@@ -57,7 +174,42 @@ export class ApplicationsController {
   @Patch(':id/status')
   @Permissions('IAM', 'APPLICATIONS', '777')
   @ApiOperation({
-    summary: 'Cambiar estatus',
+    summary: 'Cambiar estatus de aplicación',
+    description: `
+    Activa o desactiva una aplicación.
+
+    Impacto funcional:
+
+    Application Status
+    ↓
+    Modules
+    ↓
+    Resources
+    ↓
+    Role Permissions
+    ↓
+    Permission Cache
+    ↓
+    JWT
+
+    Los cambios provocan invalidación y reconstrucción del permission cache.
+
+    Permiso requerido:
+
+    IAM / APPLICATIONS / 777
+    `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID de la aplicación',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado actualizado correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Aplicación no encontrada',
   })
   updateStatus(@Param('id') id: string, @Body('active') active: boolean) {
     return this.applicationsService.updateStatus(id, active);
