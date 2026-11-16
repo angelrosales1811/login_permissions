@@ -18,6 +18,10 @@ import { UpdateModuleDto } from './dto/update-module.dto';
 import { AuditContextService } from '../../common/services/audit-context.service';
 import { AuditEntityService } from '../../common/services/audit-entity.service';
 
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+import { AuditLogService } from '../../common/services/audit-log.service';
+
 @Injectable()
 export class ModulesService {
   constructor(
@@ -32,7 +36,9 @@ export class ModulesService {
 
     private readonly auditContextService: AuditContextService,
 
-    private readonly auditEntityService: AuditEntityService
+    private readonly auditEntityService: AuditEntityService,
+
+    private readonly auditLogService: AuditLogService
   ) {}
 
   private async validateModuleCanBeDisabled(moduleId: string): Promise<void> {
@@ -85,7 +91,18 @@ export class ModulesService {
 
     this.auditEntityService.applyCreationAudit(module, context);
 
-    return this.moduleRepository.save(module);
+    const saved = await this.moduleRepository.save(module);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE,
+      recordId: saved.id,
+      applicationId: saved.application_id,
+      newValues: { ...saved },
+    });
+
+    return saved;
   }
 
   async findAll(): Promise<Module[]> {
@@ -110,6 +127,9 @@ export class ModulesService {
 
   async update(id: string, dto: UpdateModuleDto): Promise<Module> {
     const module = await this.findOne(id);
+    const oldValues = {
+      ...module,
+    };
 
     module.internal_name = dto.internal_name ?? module.internal_name;
 
@@ -124,11 +144,27 @@ export class ModulesService {
     const context = this.auditContextService.getContext();
 
     this.auditEntityService.applyUpdateAudit(module, context);
-    return this.moduleRepository.save(module);
+
+    const updated = await this.moduleRepository.save(module);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE,
+      recordId: updated.id,
+      applicationId: updated.id,
+      oldValues,
+      newValues: { ...updated },
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, active: boolean): Promise<Module> {
     const module = await this.findOne(id);
+    const oldValues = {
+      ...module,
+    };
 
     if (!active) {
       await this.validateModuleCanBeDisabled(id);
@@ -140,6 +176,18 @@ export class ModulesService {
 
     this.auditEntityService.applyUpdateAudit(module, context);
 
-    return this.moduleRepository.save(module);
+    const updated = await this.moduleRepository.save(module);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE,
+      recordId: updated.id,
+      applicationId: updated.id,
+      oldValues,
+      newValues: { ...updated },
+    });
+
+    return updated;
   }
 }

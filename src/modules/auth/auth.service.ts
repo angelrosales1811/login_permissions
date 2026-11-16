@@ -12,8 +12,8 @@ import { Repository } from 'typeorm';
 
 import { UserProfile } from '../users/entities/user-profile.entity';
 
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { Application } from '../applications/entities/application.entity';
-import { AuditLog } from '../audit/entities/audit-log.entity';
 import { NavigationService } from '../navigation/navigation.service';
 import { PermissionCache } from '../permissions/entities/permission-cache.entity';
 import { Permission } from '../permissions/entities/permission.entity';
@@ -32,6 +32,8 @@ import { SupabaseOAuthUser } from './interfaces/supabase-oauth-user.interface';
 import { hashToken } from './utils/hash-token.util';
 
 import { BadRequestException } from '@nestjs/common';
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
 
 interface SupabaseLoginResponse {
   user: {
@@ -46,6 +48,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly rolesService: RolesService,
+    private readonly auditLogService: AuditLogService,
     private readonly permissionCacheService: PermissionCacheService,
     private readonly navigationService: NavigationService,
 
@@ -76,12 +79,20 @@ export class AuthService {
     @InjectRepository(RefreshToken)
     private readonly refreshRepository: Repository<RefreshToken>,
 
-    @InjectRepository(AuditLog)
-    private readonly auditRepository: Repository<AuditLog>,
-
     @InjectRepository(UserProfile)
     private readonly userProfileRepository: Repository<UserProfile>
   ) {}
+
+  private async getIamApplicationId(): Promise<string | undefined> {
+    const application = await this.applicationRepository.findOne({
+      where: {
+        code: 'IAM',
+        active: true,
+      },
+    });
+
+    return application?.id;
+  }
 
   private async authenticateWithSupabase(email: string, password: string) {
     const response = await fetch(
@@ -324,21 +335,19 @@ export class AuthService {
 
     const savedProfile = await this.userProfileRepository.save(profile);
 
-    await this.auditRepository.save({
-      user_id: savedProfile.id,
+    const applicationId = await this.getIamApplicationId();
 
-      module_name: 'AUTH',
-
-      entity_name: 'USER_PROFILE',
-
-      action: 'GOOGLE_REGISTER',
-
-      new_values: {
+    await this.auditLogService.record({
+      userId: savedProfile.id,
+      applicationId,
+      action: AUDIT_ACTIONS.GOOGLE_REGISTER,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER_PROFILE,
+      recordId: savedProfile.id,
+      newValues: {
         auth_user_id: savedProfile.auth_user_id,
         email: savedProfile.email,
       },
-
-      created_at: new Date(),
     });
 
     return savedProfile;
@@ -374,12 +383,18 @@ export class AuthService {
       active: true,
     });
 
-    await this.auditRepository.save({
-      user_id: userId,
-      module_name: 'AUTH',
-      entity_name: 'USER_ROLE',
-      action: 'ASSIGN_GUEST_ROLE',
-      created_at: new Date(),
+    const applicationId = await this.getIamApplicationId();
+
+    await this.auditLogService.record({
+      userId,
+      applicationId,
+      action: AUDIT_ACTIONS.ASSIGN_GUEST_ROLE,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER_ROLE,
+      recordId: userId,
+      newValues: {
+        roleId: guestRole.id,
+      },
     });
 
     return true;
@@ -501,12 +516,19 @@ export class AuthService {
       created_at: new Date(),
     });
 
-    await this.auditRepository.save({
-      user_id: payload.sub,
-      module_name: 'AUTH',
-      entity_name: 'LOGIN',
-      action: 'LOGIN',
-      created_at: new Date(),
+    const applicationId = await this.getIamApplicationId();
+
+    await this.auditLogService.record({
+      userId: profile.id,
+      applicationId,
+      action: AUDIT_ACTIONS.LOGIN,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER,
+      recordId: profile.id,
+      newValues: {
+        email: profile.email,
+        sessionId: session.id,
+      },
     });
 
     return {
@@ -558,22 +580,6 @@ export class AuthService {
 
     const user = (await response.json()) as SupabaseOAuthUser;
 
-    // await this.auditRepository.save({
-    //   module_name: 'AUTH',
-
-    //   entity_name: 'GOOGLE_OAUTH',
-
-    //   action: 'OAUTH_CALLBACK',
-
-    //   new_values: {
-    //     auth_user_id: user.id,
-    //     email: user.email,
-    //     provider: 'google',
-    //   },
-
-    //   created_at: new Date(),
-    // });
-
     const existingProfile = await this.userProfileRepository.findOne({
       where: {
         auth_user_id: user.id,
@@ -598,40 +604,34 @@ export class AuthService {
           : undefined,
     });
 
-    await this.auditRepository.save({
-      user_id: profile.id,
+    const applicationId = await this.getIamApplicationId();
 
-      module_name: 'AUTH',
-
-      entity_name: 'GOOGLE_OAUTH',
-
-      action: 'OAUTH_CALLBACK',
-
-      new_values: {
-        auth_user_id: user.id,
-        email: user.email,
-        provider: 'google',
+    await this.auditLogService.record({
+      userId: profile.id,
+      applicationId,
+      action: AUDIT_ACTIONS.LOGIN,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER,
+      recordId: profile.id,
+      newValues: {
+        provider: 'GOOGLE',
+        authUserId: user.id,
+        email: profile.email,
       },
-
-      created_at: new Date(),
     });
 
     if (profileCreated) {
-      await this.auditRepository.save({
-        user_id: profile.id,
-
-        module_name: 'AUTH',
-
-        entity_name: 'USER_PROFILE',
-
-        action: 'FIRST_ACCESS',
-
-        new_values: {
-          auth_user_id: profile.auth_user_id,
+      await this.auditLogService.record({
+        userId: profile.id,
+        applicationId,
+        action: AUDIT_ACTIONS.FIRST_ACCESS,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.USER_PROFILE,
+        recordId: profile.id,
+        newValues: {
+          authUserId: profile.auth_user_id,
           email: profile.email,
         },
-
-        created_at: new Date(),
       });
     }
 
@@ -645,12 +645,15 @@ export class AuthService {
         profile.id
       );
 
-      await this.auditRepository.save({
-        user_id: profile.id,
-        module_name: 'AUTH',
-        entity_name: 'PERMISSION_CACHE',
-        action: 'INITIAL_CACHE_GENERATED',
-        created_at: new Date(),
+      await this.auditLogService.record({
+        applicationId,
+        action: AUDIT_ACTIONS.INITIAL_CACHE_GENERATED,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+        recordId: profile.id,
+        newValues: {
+          permissionRecords: generatedPermissions,
+        },
       });
 
       await this.validateProvisioning(profile.id);
@@ -661,35 +664,31 @@ export class AuthService {
         throw new BadRequestException('Provisioning inválido: no existen menús visibles');
       }
 
-      await this.auditRepository.save({
-        user_id: profile.id,
-        module_name: 'AUTH',
-        entity_name: 'NAVIGATION',
-        action: 'MENU_PROVISIONED',
-        new_values: {
+      await this.auditLogService.record({
+        applicationId,
+        action: AUDIT_ACTIONS.MENU_PROVISIONED,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.NAVIGATION,
+        recordId: profile.id,
+        newValues: {
           menuAccess: true,
         },
-        created_at: new Date(),
       });
     }
-
+    //////////////////////
     const authResult = await this.generatePlatformTokens(profile);
 
-    await this.auditRepository.save({
-      user_id: profile.id,
-
-      module_name: 'AUTH',
-
-      entity_name: 'JWT',
-
-      action: 'GOOGLE_LOGIN',
-
-      new_values: {
-        session_id: authResult.sessionId,
+    await this.auditLogService.record({
+      userId: profile.id,
+      applicationId,
+      action: AUDIT_ACTIONS.GOOGLE_LOGIN,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.JWT,
+      recordId: profile.id,
+      newValues: {
+        sessionId: authResult.sessionId,
         email: profile.email,
       },
-
-      created_at: new Date(),
     });
 
     return {
@@ -778,13 +777,21 @@ export class AuthService {
           logout_at: new Date(),
         }
       );
-      await this.auditRepository.save({
-        user_id: token.user_id,
-        module_name: 'AUTH',
-        entity_name: 'REFRESH_TOKEN',
-        action: 'TOKEN_REUSE_DETECTED',
-        created_at: new Date(),
+
+      const applicationId = await this.getIamApplicationId();
+
+      await this.auditLogService.record({
+        userId: token.user_id,
+        applicationId,
+        action: AUDIT_ACTIONS.REFRESH_TOKEN_REUSE_DETECTED,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.REFRESH_TOKEN,
+        recordId: token.user_id,
+        newValues: {
+          tokenFamily: token.token_family,
+        },
       });
+
       throw new UnauthorizedException('Token reutilizado detectado');
     }
 
@@ -853,12 +860,20 @@ export class AuthService {
     token.replaced_by = refreshRecord.id;
 
     await this.refreshRepository.save(token);
-    await this.auditRepository.save({
-      user_id: payload.sub,
-      module_name: 'AUTH',
-      entity_name: 'REFRESH_TOKEN',
-      action: 'REFRESH',
-      created_at: new Date(),
+
+    const applicationId = await this.getIamApplicationId();
+
+    await this.auditLogService.record({
+      userId: payload.sub,
+      applicationId,
+      action: AUDIT_ACTIONS.REFRESH,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.REFRESH_TOKEN,
+      recordId: payload.sub,
+      newValues: {
+        sessionId: payload.sessionId,
+        tokenFamily: payload.familyId,
+      },
     });
 
     return {
@@ -931,12 +946,18 @@ export class AuthService {
       }
     );
 
-    await this.auditRepository.save({
-      user_id: userId,
-      module_name: 'AUTH',
-      entity_name: 'LOGOUT',
-      action: 'LOGOUT',
-      created_at: new Date(),
+    const applicationId = await this.getIamApplicationId();
+
+    await this.auditLogService.record({
+      userId,
+      applicationId,
+      action: AUDIT_ACTIONS.LOGOUT,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER_SESSION,
+      recordId: userId,
+      newValues: {
+        sessionId,
+      },
     });
 
     return {
@@ -966,12 +987,15 @@ export class AuthService {
       }
     );
 
-    await this.auditRepository.save({
-      user_id: userId,
-      module_name: 'AUTH',
-      entity_name: 'LOGOUT_ALL',
-      action: 'LOGOUT_ALL',
-      created_at: new Date(),
+    const applicationId = await this.getIamApplicationId();
+
+    await this.auditLogService.record({
+      userId,
+      applicationId,
+      action: AUDIT_ACTIONS.LOGOUT_ALL,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.USER_SESSION,
+      recordId: userId,
     });
 
     return {

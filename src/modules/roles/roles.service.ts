@@ -25,6 +25,12 @@ import { AuditContextService } from '../../common/services/audit-context.service
 import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 
+import { AuditLogService } from '../../common/services/audit-log.service';
+
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+
 @Injectable()
 export class RolesService {
   constructor(
@@ -59,7 +65,9 @@ export class RolesService {
 
     private readonly auditContextService: AuditContextService,
 
-    private readonly auditEntityService: AuditEntityService
+    private readonly auditEntityService: AuditEntityService,
+
+    private readonly auditLogService: AuditLogService
   ) {}
 
   async getUserRolesByUserId(userId: string): Promise<string[]> {
@@ -103,8 +111,6 @@ export class RolesService {
   }
 
   async create(dto: CreateRoleDto): Promise<Role> {
-    console.log(this.auditContextService.getContext());
-
     const exists = await this.roleRepository.findOne({
       where: {
         internal_name: dto.internal_name,
@@ -126,7 +132,27 @@ export class RolesService {
 
     this.auditEntityService.applyCreationAudit(role, context);
 
-    return this.roleRepository.save(role);
+    const saved = await this.roleRepository.save(role);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE,
+
+      recordId: saved.id,
+
+      newValues: {
+        id: saved.id,
+        internal_name: saved.internal_name,
+        external_name: saved.external_name,
+        description: saved.description,
+        active: saved.active,
+      },
+    });
+
+    return saved;
   }
 
   async findAll(): Promise<Role[]> {
@@ -152,6 +178,13 @@ export class RolesService {
   async update(id: string, dto: UpdateRoleDto): Promise<Role> {
     const role = await this.findOne(id);
 
+    const oldValues = {
+      internal_name: role.internal_name,
+      external_name: role.external_name,
+      description: role.description,
+      active: role.active,
+    };
+
     role.internal_name = dto.internal_name ?? role.internal_name;
 
     role.external_name = dto.external_name ?? role.external_name;
@@ -162,17 +195,62 @@ export class RolesService {
 
     this.auditEntityService.applyUpdateAudit(role, context);
 
-    return this.roleRepository.save(role);
+    const updated = await this.roleRepository.save(role);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE,
+
+      recordId: updated.id,
+
+      oldValues,
+
+      newValues: {
+        internal_name: updated.internal_name,
+        external_name: updated.external_name,
+        description: updated.description,
+        active: updated.active,
+      },
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, active: boolean): Promise<Role> {
     const role = await this.findOne(id);
 
+    const oldValues = {
+      active: role.active,
+    };
+
     role.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(role, context);
 
     const updated = await this.roleRepository.save(role);
 
     await this.permissionCacheService.rebuildUsersByRole(id);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE,
+
+      recordId: updated.id,
+
+      oldValues,
+
+      newValues: {
+        active: updated.active,
+      },
+    });
 
     return updated;
   }
@@ -190,9 +268,23 @@ export class RolesService {
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto): Promise<void> {
     await this.findOne(roleId);
+
     if (!dto.permissions.length) {
       throw new ConflictException('La matriz de permisos no puede quedar vacía');
     }
+
+    const oldRelations = await this.rolePermissionRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    const oldValues = oldRelations.map((x) => ({
+      resource_id: x.resource_id,
+      permission_id: x.permission_id,
+      application_id: x.application_id,
+    }));
 
     const context = this.auditContextService.getContext();
 
@@ -220,14 +312,20 @@ export class RolesService {
       }
     }
 
-    await this.rolePermissionRepository.update(
-      {
+    const currentPermissions = await this.rolePermissionRepository.find({
+      where: {
         role_id: roleId,
+        active: true,
       },
-      {
-        active: false,
-      }
-    );
+    });
+
+    for (const relation of currentPermissions) {
+      relation.active = false;
+
+      this.auditEntityService.applyUpdateAudit(relation, context);
+
+      await this.rolePermissionRepository.save(relation);
+    }
 
     for (const item of dto.permissions) {
       const exists = await this.rolePermissionRepository.findOne({
@@ -265,6 +363,26 @@ export class RolesService {
     }
 
     await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.PERMISSION_ASSIGN,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE_PERMISSION,
+
+      recordId: roleId,
+
+      oldValues: {
+        permissions: oldValues,
+        totalPermissions: oldValues.length,
+      },
+
+      newValues: {
+        permissions: dto.permissions,
+        totalPermissions: dto.permissions.length,
+      },
+    });
   }
 
   async getRoleModules(roleId: string): Promise<RoleModule[]> {
@@ -280,6 +398,19 @@ export class RolesService {
 
   async updateRoleModules(roleId: string, dto: UpdateRoleModulesDto): Promise<void> {
     await this.findOne(roleId);
+
+    const oldRelations = await this.roleModuleRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    const oldValues = oldRelations.map((x) => ({
+      module_id: x.module_id,
+      application_id: x.application_id,
+    }));
+
     const context = this.auditContextService.getContext();
 
     for (const moduleId of dto.moduleIds) {
@@ -295,14 +426,20 @@ export class RolesService {
       }
     }
 
-    await this.roleModuleRepository.update(
-      {
+    const currentModules = await this.roleModuleRepository.find({
+      where: {
         role_id: roleId,
+        active: true,
       },
-      {
-        active: false,
-      }
-    );
+    });
+
+    for (const relation of currentModules) {
+      relation.active = false;
+
+      this.auditEntityService.applyUpdateAudit(relation, context);
+
+      await this.roleModuleRepository.save(relation);
+    }
 
     for (const moduleId of dto.moduleIds) {
       const module = await this.moduleRepository.findOne({
@@ -339,6 +476,26 @@ export class RolesService {
     }
 
     await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.MODULE_ASSIGN,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE_MODULE,
+
+      recordId: roleId,
+
+      oldValues: {
+        modules: oldValues,
+        totalModules: oldValues.length,
+      },
+
+      newValues: {
+        moduleIds: dto.moduleIds,
+        totalModules: dto.moduleIds.length,
+      },
+    });
   }
 
   async getPermissionMatrix(): Promise<PermissionMatrixResponseDto[]> {

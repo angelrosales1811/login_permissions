@@ -23,6 +23,12 @@ import { AuditEntityService } from '../../common/services/audit-entity.service';
 
 import { PermissionCacheService } from './permission-cache.service';
 
+import { AuditLogService } from '../../common/services/audit-log.service';
+
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+
 @Injectable()
 export class PermissionsService {
   constructor(
@@ -35,7 +41,9 @@ export class PermissionsService {
     private readonly rolePermissionRepository: Repository<RolePermission>,
     private readonly auditContextService: AuditContextService,
 
-    private readonly auditEntityService: AuditEntityService
+    private readonly auditEntityService: AuditEntityService,
+
+    private readonly auditLogService: AuditLogService
   ) {}
 
   async create(dto: CreatePermissionDto): Promise<Permission> {
@@ -61,9 +69,13 @@ export class PermissionsService {
 
     const permission = this.permissionRepository.create({
       internal_name: dto.internal_name.trim().toUpperCase(),
+
       external_name: dto.external_name,
+
       permission_code: dto.permission_code.trim().toUpperCase(),
+
       description: dto.description,
+
       active: true,
     });
 
@@ -71,7 +83,28 @@ export class PermissionsService {
 
     this.auditEntityService.applyCreationAudit(permission, context);
 
-    return this.permissionRepository.save(permission);
+    const saved = await this.permissionRepository.save(permission);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.PERMISSION,
+
+      recordId: saved.id,
+
+      newValues: {
+        id: saved.id,
+        internal_name: saved.internal_name,
+        external_name: saved.external_name,
+        permission_code: saved.permission_code,
+        description: saved.description,
+        active: saved.active,
+      },
+    });
+
+    return saved;
   }
 
   async findAll(): Promise<Permission[]> {
@@ -112,6 +145,18 @@ export class PermissionsService {
   async update(id: string, dto: UpdatePermissionDto): Promise<Permission> {
     const permission = await this.findOne(id);
 
+    const oldValues = {
+      internal_name: permission.internal_name,
+
+      external_name: permission.external_name,
+
+      permission_code: permission.permission_code,
+
+      description: permission.description,
+
+      active: permission.active,
+    };
+
     if (dto.permission_code && dto.permission_code !== permission.permission_code) {
       await this.validatePermissionCodeChange(id);
     }
@@ -130,11 +175,41 @@ export class PermissionsService {
 
     this.auditEntityService.applyUpdateAudit(permission, context);
 
-    return this.permissionRepository.save(permission);
+    const updated = await this.permissionRepository.save(permission);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.PERMISSION,
+
+      recordId: updated.id,
+
+      oldValues,
+
+      newValues: {
+        internal_name: updated.internal_name,
+
+        external_name: updated.external_name,
+
+        permission_code: updated.permission_code,
+
+        description: updated.description,
+
+        active: updated.active,
+      },
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, active: boolean): Promise<Permission> {
     const permission = await this.findOne(id);
+
+    const oldValues = {
+      active: permission.active,
+    };
 
     permission.active = active;
 
@@ -142,7 +217,25 @@ export class PermissionsService {
 
     this.auditEntityService.applyUpdateAudit(permission, context);
 
-    return this.permissionRepository.save(permission);
+    const updated = await this.permissionRepository.save(permission);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.PERMISSION,
+
+      recordId: updated.id,
+
+      oldValues,
+
+      newValues: {
+        active: updated.active,
+      },
+    });
+
+    return updated;
   }
 
   async cacheHealth() {
@@ -152,6 +245,20 @@ export class PermissionsService {
   async rebuildUserCache(userId: string) {
     const rebuilt = await this.permissionCacheService.repairUserCache(userId);
 
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.INITIAL_CACHE_GENERATED,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+
+      recordId: userId,
+
+      newValues: {
+        rebuiltRecords: rebuilt,
+      },
+    });
+
     return {
       userId,
       rebuilt,
@@ -159,6 +266,18 @@ export class PermissionsService {
   }
 
   async rebuildAllCaches() {
-    return this.permissionCacheService.rebuildAllCaches();
+    const result = await this.permissionCacheService.rebuildAllCaches();
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.INITIAL_CACHE_GENERATED,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+
+      newValues: result,
+    });
+
+    return result;
   }
 }

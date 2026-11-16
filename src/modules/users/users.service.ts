@@ -5,8 +5,11 @@ import { UserProfile } from './entities/user-profile.entity';
 
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
 import { AuditContextService } from '../../common/services/audit-context.service';
 import { AuditEntityService } from '../../common/services/audit-entity.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { PermissionCacheService } from '../permissions/permission-cache.service';
 import { Role } from '../roles/entities/role.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
@@ -28,7 +31,9 @@ export class UsersService {
 
     private readonly auditContextService: AuditContextService,
 
-    private readonly auditEntityService: AuditEntityService
+    private readonly auditEntityService: AuditEntityService,
+
+    private readonly auditLogService: AuditLogService
   ) {}
 
   create(createUserDto: CreateUserDto) {
@@ -63,6 +68,18 @@ export class UsersService {
 
   async updateUserRoles(userId: string, dto: UpdateUserRolesDto): Promise<void> {
     await this.findOne(userId);
+
+    const oldRelations = await this.userRoleRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    const oldValues = oldRelations.map((x) => ({
+      role_id: x.role_id,
+    }));
+
     const context = this.auditContextService.getContext();
 
     for (const roleId of dto.roleIds) {
@@ -78,14 +95,20 @@ export class UsersService {
       }
     }
 
-    await this.userRoleRepository.update(
-      {
+    const existingRoles = await this.userRoleRepository.find({
+      where: {
         user_id: userId,
+        active: true,
       },
-      {
-        active: false,
-      }
-    );
+    });
+
+    for (const relation of existingRoles) {
+      relation.active = false;
+
+      this.auditEntityService.applyUpdateAudit(relation, context);
+
+      await this.userRoleRepository.save(relation);
+    }
 
     for (const roleId of dto.roleIds) {
       const exists = await this.userRoleRepository.findOne({
@@ -117,6 +140,26 @@ export class UsersService {
     }
 
     await this.permissionCacheService.rebuildUserPermissionCache(userId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.ROLE_ASSIGN,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.USER_ROLE,
+
+      recordId: userId,
+
+      oldValues: {
+        roles: oldValues,
+        totalRoles: oldValues.length,
+      },
+
+      newValues: {
+        roleIds: dto.roleIds,
+        totalRoles: dto.roleIds.length,
+      },
+    });
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {

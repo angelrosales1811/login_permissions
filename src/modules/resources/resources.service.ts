@@ -1,8 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
+import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
 import { AuditContextService } from '../../common/services/audit-context.service';
 import { AuditEntityService } from '../../common/services/audit-entity.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { ModuleResource } from '../modules/entities/module-resource.entity';
 import { Module } from '../modules/entities/module.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
@@ -23,21 +26,10 @@ export class ResourcesService {
 
     private readonly auditContextService: AuditContextService,
 
-    private readonly auditEntityService: AuditEntityService
+    private readonly auditEntityService: AuditEntityService,
+
+    private readonly auditLogService: AuditLogService
   ) {}
-
-  // private async validateCanDisable(resourceId: string): Promise<void> {
-  //   const count = await this.dataSource
-  //     .createQueryBuilder()
-  //     .from('role_permissions', 'rp')
-  //     .where('rp.resource_id = :resourceId', { resourceId })
-  //     .andWhere('rp.active = true')
-  //     .getCount();
-
-  //   if (count > 0) {
-  //     throw new BadRequestException('No es posible desactivar un recurso con permisos asignados');
-  //   }
-  // }
 
   async create(dto: CreateResourceDto): Promise<Resource> {
     const exists = await this.resourceRepository.findOne({
@@ -73,7 +65,23 @@ export class ResourcesService {
 
     this.auditEntityService.applyCreationAudit(resource, context);
 
-    await this.resourceRepository.save(resource);
+    const savedResource = await this.resourceRepository.save(resource);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.RESOURCE,
+      recordId: savedResource.id,
+      applicationId: savedResource.application_id,
+      newValues: {
+        id: savedResource.id,
+        internal_name: savedResource.internal_name,
+        external_name: savedResource.external_name,
+        application_id: savedResource.application_id,
+        active: savedResource.active,
+      },
+    });
+
     for (const moduleId of dto.module_ids) {
       const module = await this.moduleRepository.findOne({
         where: {
@@ -85,14 +93,31 @@ export class ResourcesService {
         throw new NotFoundException(`Module ${moduleId} not found`);
       }
 
-      await this.moduleResourceRepository.save({
+      const relation = this.moduleResourceRepository.create({
         module_id: moduleId,
-        resource_id: resource.id,
+        resource_id: savedResource.id,
         active: true,
+      });
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      const savedRelation = await this.moduleResourceRepository.save(relation);
+
+      await this.auditLogService.record({
+        action: AUDIT_ACTIONS.CREATE,
+        moduleName: 'IAM',
+        entityName: AUDIT_ENTITIES.MODULE_RESOURCE,
+        recordId: savedResource.id,
+        applicationId: savedResource.application_id,
+        newValues: {
+          module_id: savedRelation.module_id,
+          resource_id: savedRelation.resource_id,
+          active: savedRelation.active,
+        },
       });
     }
 
-    return resource;
+    return savedResource;
   }
 
   async findAll(): Promise<Resource[]> {
@@ -118,6 +143,10 @@ export class ResourcesService {
   async update(id: string, dto: UpdateResourceDto): Promise<Resource> {
     const resource = await this.findOne(id);
 
+    const oldValues = {
+      ...resource,
+    };
+
     resource.internal_name = dto.internal_name ?? resource.internal_name;
 
     resource.external_name = dto.external_name ?? resource.external_name;
@@ -130,11 +159,34 @@ export class ResourcesService {
 
     this.auditEntityService.applyUpdateAudit(resource, context);
 
-    return this.resourceRepository.save(resource);
+    const updated = await this.resourceRepository.save(resource);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.RESOURCE,
+      recordId: updated.id,
+      applicationId: updated.application_id,
+      oldValues,
+      newValues: {
+        id: updated.id,
+        internal_name: updated.internal_name,
+        external_name: updated.external_name,
+        description: updated.description,
+        application_id: updated.application_id,
+        active: updated.active,
+      },
+    });
+
+    return updated;
   }
 
   async updateStatus(id: string, active: boolean): Promise<Resource> {
     const resource = await this.findOne(id);
+
+    const oldValues = {
+      ...resource,
+    };
 
     resource.active = active;
 
@@ -142,6 +194,21 @@ export class ResourcesService {
 
     this.auditEntityService.applyUpdateAudit(resource, context);
 
-    return this.resourceRepository.save(resource);
+    const updated = await this.resourceRepository.save(resource);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.RESOURCE,
+      recordId: updated.id,
+      applicationId: updated.application_id,
+      oldValues,
+      newValues: {
+        id: updated.id,
+        active: updated.active,
+      },
+    });
+
+    return updated;
   }
 }

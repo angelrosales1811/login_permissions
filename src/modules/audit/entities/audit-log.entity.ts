@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity({
   schema: 'security',
@@ -11,55 +11,66 @@ export class AuditLog {
   id!: string;
 
   @Column({
+    name: 'user_id',
     nullable: true,
   })
-  user_id?: string;
+  userId?: string;
 
   @Column({
+    name: 'module_name',
     nullable: true,
   })
-  module_name?: string;
+  moduleName?: string;
 
   @Column({
+    name: 'entity_name',
     nullable: true,
   })
-  entity_name?: string;
+  entityName?: string;
 
   @Column({
+    name: 'record_id',
     nullable: true,
   })
-  record_id?: string;
+  recordId?: string;
 
   @Column({
     nullable: true,
   })
   action?: string;
+  @Column({
+    nullable: true,
+  })
+  success?: boolean;
 
   @Column({
+    name: 'old_values',
     type: 'jsonb',
     nullable: true,
   })
-  old_values?: object;
+  oldValues?: object;
 
   @Column({
+    name: 'new_values',
     type: 'jsonb',
     nullable: true,
   })
-  new_values?: object;
+  newValues?: object;
 
   @Column({
     nullable: true,
   })
   ip?: string;
 
-  @Column({
+  @CreateDateColumn({
+    name: 'created_at',
     type: 'timestamptz',
-    nullable: true,
   })
   created_at?: Date;
 
   @Column({
+    name: 'application_id',
     nullable: true,
   })
-  application_id?: string;
+  applicationId?: string;
 }
