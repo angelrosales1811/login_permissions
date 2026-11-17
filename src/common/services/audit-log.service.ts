@@ -28,7 +28,7 @@ export class AuditLogService {
         oldValues: event.oldValues,
         newValues: event.newValues,
         ip: context.ip ?? undefined,
-        applicationId: event.applicationId,
+        applicationId: event.applicationId ?? context.applicationId ?? undefined,
       });
 
       await this.auditRepository.save(log);

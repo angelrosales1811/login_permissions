@@ -3,5 +3,7 @@ export interface AuditContext {
 
   ip: string | null;
 
+  applicationId: string | null;
+
   now: Date;
 }

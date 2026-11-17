@@ -13,6 +13,8 @@ export class AuditContextService {
 
       ip: this.requestContextService.getIp(),
 
+      applicationId: this.requestContextService.getApplicationId(),
+
       now: new Date(),
     };
   }

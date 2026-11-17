@@ -528,6 +528,8 @@ export class AuthService {
       newValues: {
         email: profile.email,
         sessionId: session.id,
+        authUserId: profile.auth_user_id,
+        roles,
       },
     });
 
@@ -675,7 +677,7 @@ export class AuthService {
         },
       });
     }
-    //////////////////////
+
     const authResult = await this.generatePlatformTokens(profile);
 
     await this.auditLogService.record({
@@ -873,6 +875,8 @@ export class AuthService {
       newValues: {
         sessionId: payload.sessionId,
         tokenFamily: payload.familyId,
+        email: payload.email,
+        uid: payload.uid,
       },
     });
 
@@ -957,6 +961,7 @@ export class AuthService {
       recordId: userId,
       newValues: {
         sessionId,
+        userId,
       },
     });
 

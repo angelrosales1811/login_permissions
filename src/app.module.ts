@@ -17,6 +17,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
     ModulesModule,
     ApplicationsModule,
     PermissionsModule,
+    AuditModule,
   ],
   //providers: [AuditContextService, AuditEntityService],
 })

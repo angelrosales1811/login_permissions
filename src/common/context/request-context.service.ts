@@ -6,6 +6,8 @@ export class RequestContextService {
 
   private ip: string | null = null;
 
+  private applicationId: string | null = null;
+
   setUserId(userId: string | null): void {
     this.userId = userId;
   }
@@ -22,9 +24,17 @@ export class RequestContextService {
     return this.ip;
   }
 
+  setApplicationId(applicationId: string | null): void {
+    this.applicationId = applicationId;
+  }
+
+  getApplicationId(): string | null {
+    return this.applicationId;
+  }
+
   clear(): void {
     this.userId = null;
-
     this.ip = null;
+    this.applicationId = null;
   }
 }
