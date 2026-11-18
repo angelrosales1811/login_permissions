@@ -2,9 +2,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { AuditHistoryQueryDto } from './dto/audit-history-query.dto';
 import { AuditLog } from './entities/audit-log.entity';
+import { UserAccessLog } from './entities/user-access-log.entity';
 
 import { Injectable } from '@nestjs/common';
 
+import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto } from './dto/update-audit.dto';
 
@@ -12,7 +14,9 @@ import { UpdateAuditDto } from './dto/update-audit.dto';
 export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
-    private readonly auditRepository: Repository<AuditLog>
+    private readonly auditRepository: Repository<AuditLog>,
+    @InjectRepository(UserAccessLog)
+    private readonly accessRepository: Repository<UserAccessLog>
   ) {}
 
   async getHistory(filters: AuditHistoryQueryDto) {
@@ -79,6 +83,15 @@ export class AuditService {
     });
   }
 
+  async getAccessHistory() {
+    return this.accessRepository.find({
+      order: {
+        created_at: 'DESC',
+      },
+      take: 500,
+    });
+  }
+
   async findEntities() {
     return this.auditRepository
       .createQueryBuilder('audit')
@@ -108,5 +121,61 @@ export class AuditService {
 
   remove(id: number) {
     return `This action removes a #${id} audit`;
+  }
+
+  async getRbacMetrics() {
+    const [
+      cacheHit,
+      cacheMiss,
+      cacheRecovered,
+      permissionDenied,
+      invalidSession,
+      refreshTokenReused,
+    ] = await Promise.all([
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.CACHE_HIT,
+        },
+      }),
+
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.CACHE_MISS,
+        },
+      }),
+
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.CACHE_RECOVERED,
+        },
+      }),
+
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.PERMISSION_DENIED,
+        },
+      }),
+
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.INVALID_SESSION,
+        },
+      }),
+
+      this.auditRepository.count({
+        where: {
+          action: AUDIT_ACTIONS.REFRESH_TOKEN_REUSE_DETECTED,
+        },
+      }),
+    ]);
+
+    return {
+      cacheHit,
+      cacheMiss,
+      cacheRecovered,
+      permissionDenied,
+      invalidSession,
+      refreshTokenReused,
+    };
   }
 }

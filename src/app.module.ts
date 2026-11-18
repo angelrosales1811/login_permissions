@@ -19,6 +19,10 @@ import { UsersModule } from './modules/users/users.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { AuditModule } from './modules/audit/audit.module';
 
+import { APP_INTERCEPTOR } from '@nestjs/core';
+
+import { AccessAuditInterceptor } from './common/interceptors/access-audit.interceptor';
+
 @Module({
   imports: [
     CommonModule,
@@ -65,7 +69,12 @@ import { AuditModule } from './modules/audit/audit.module';
     PermissionsModule,
     AuditModule,
   ],
-  //providers: [AuditContextService, AuditEntityService],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AccessAuditInterceptor,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

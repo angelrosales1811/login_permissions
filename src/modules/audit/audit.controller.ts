@@ -21,6 +21,8 @@ import { AuditHistoryQueryDto } from './dto/audit-history-query.dto';
 
 import { AuditHistoryResponseDto } from './dto/audit-history-response.dto';
 
+import { UserAccessHistoryQueryDto } from './dto/user-access-history-query.dto';
+
 @ApiTags('Audit')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -71,6 +73,56 @@ export class AuditController {
     query: AuditHistoryQueryDto
   ) {
     return this.auditService.getHistory(query);
+  }
+
+  @Get('access-history')
+  @Permissions('IAM', 'AUDIT', '644')
+  @ApiOperation({
+    summary: 'Consultar historial de accesos',
+    description: `
+Consulta los accesos registrados en security.user_access_log.
+
+Fase:
+4A.19 Auditoría de Accesos
+
+Base para:
+4A.20 Observabilidad y Métricas.
+`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Historial de accesos obtenido correctamente',
+  })
+  getAccessHistory(
+    @Query()
+    query: UserAccessHistoryQueryDto
+  ) {
+    console.log(query);
+    return this.auditService.getAccessHistory();
+  }
+
+  @Get('rbac-metrics')
+  @ApiOperation({
+    summary: 'Métricas RBAC',
+    description: `
+      Observabilidad del sistema RBAC.
+
+      Incluye:
+
+      - CACHE HIT
+      - CACHE MISS
+      - CACHE RECOVERED
+      - PERMISSION DENIED
+      - INVALID SESSION
+      - REFRESH TOKEN REUSE
+      `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Métricas RBAC obtenidas correctamente',
+  })
+  getRbacMetrics() {
+    return this.auditService.getRbacMetrics();
   }
 
   @Get('entities')

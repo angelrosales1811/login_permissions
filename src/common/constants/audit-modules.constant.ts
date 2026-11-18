@@ -1,0 +1,17 @@
+export const AUDIT_MODULES = {
+  AUTH: 'AUTH',
+
+  USERS: 'USERS',
+
+  ROLES: 'ROLES',
+
+  MODULES: 'MODULES',
+
+  RESOURCES: 'RESOURCES',
+
+  PERMISSIONS: 'PERMISSIONS',
+
+  AUDIT: 'AUDIT',
+
+  NAVIGATION: 'NAVIGATION',
+} as const;

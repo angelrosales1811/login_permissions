@@ -227,11 +227,25 @@ export class AuthService {
 
     if (cache) {
       console.log(`[RBAC] CACHE HIT ${userId}`);
+      await this.auditLogService.record({
+        userId,
+        action: AUDIT_ACTIONS.CACHE_HIT,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+        recordId: userId,
+      });
 
       return cache;
     }
 
     console.warn(`[RBAC] CACHE MISS ${userId}`);
+    await this.auditLogService.record({
+      userId,
+      action: AUDIT_ACTIONS.CACHE_MISS,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+      recordId: userId,
+    });
 
     const rebuilt = await this.permissionCacheService.rebuildUserPermissionCache(userId);
 
@@ -240,6 +254,13 @@ export class AuthService {
     }
 
     console.warn(`[RBAC] CACHE RECOVERED ${userId}`);
+    await this.auditLogService.record({
+      userId,
+      action: AUDIT_ACTIONS.CACHE_RECOVERED,
+      moduleName: 'AUTH',
+      entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+      recordId: userId,
+    });
 
     const repairedCache = await this.loadPermissionCache(userId);
 
@@ -801,6 +822,9 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expirado');
     }
 
+    const payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(dto.refreshToken, {
+      secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
+    });
     const session = await this.sessionRepository.findOne({
       where: {
         id: token.session_id,
@@ -809,12 +833,23 @@ export class AuthService {
     });
 
     if (!session) {
+      await this.auditLogService.record({
+        userId: payload.sub,
+
+        action: AUDIT_ACTIONS.INVALID_SESSION,
+
+        moduleName: 'AUTH',
+
+        entityName: AUDIT_ENTITIES.USER_SESSION,
+
+        recordId: payload.sub,
+      });
       throw new UnauthorizedException('Sesión cerrada');
     }
 
-    const payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(dto.refreshToken, {
-      secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
-    });
+    // const payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(dto.refreshToken, {
+    //   secret: this.configService.getOrThrow<string>('REFRESH_TOKEN_SECRET'),
+    // });
 
     const roles = await this.rolesService.getUserRoles(payload.sub);
 

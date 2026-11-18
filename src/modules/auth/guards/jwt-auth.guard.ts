@@ -23,6 +23,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     if (user) {
       this.requestContextService.setUserId(user.id);
+
+      this.requestContextService.setModuleName('AUTH');
+
+      this.requestContextService.setApplicationId('IAM');
     }
 
     return result;

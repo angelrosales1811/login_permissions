@@ -8,6 +8,8 @@ export class RequestContextService {
 
   private applicationId: string | null = null;
 
+  private moduleName: string | null = null;
+
   setUserId(userId: string | null): void {
     this.userId = userId;
   }
@@ -32,9 +34,18 @@ export class RequestContextService {
     return this.applicationId;
   }
 
+  setModuleName(moduleName: string | null): void {
+    this.moduleName = moduleName;
+  }
+
+  getModuleName(): string | null {
+    return this.moduleName;
+  }
+
   clear(): void {
     this.userId = null;
     this.ip = null;
     this.applicationId = null;
+    this.moduleName = null;
   }
 }
