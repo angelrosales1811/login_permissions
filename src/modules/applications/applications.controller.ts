@@ -9,6 +9,7 @@ import { Permissions } from '../auth/decorators/permission.decorator';
 
 import { ApplicationsService } from './applications.service';
 
+import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 
@@ -174,30 +175,32 @@ export class ApplicationsController {
   @Patch(':id/status')
   @Permissions('IAM', 'APPLICATIONS', '777')
   @ApiOperation({
-    summary: 'Cambiar estatus de aplicación',
+    summary: 'Soft Delete de rol',
     description: `
-    Activa o desactiva una aplicación.
+      Realiza eliminación lógica mediante la columna active.
 
-    Impacto funcional:
+      No elimina registros físicamente.
 
-    Application Status
-    ↓
-    Modules
-    ↓
-    Resources
-    ↓
-    Role Permissions
-    ↓
-    Permission Cache
-    ↓
-    JWT
+      Proceso:
 
-    Los cambios provocan invalidación y reconstrucción del permission cache.
+      Application Status
+      ↓
+      Modules
+      ↓
+      Resources
+      ↓
+      Role Permissions
+      ↓
+      Permission Cache
+      ↓
+      JWT
 
-    Permiso requerido:
+      Los cambios provocan invalidación y reconstrucción del permission cache.
 
-    IAM / APPLICATIONS / 777
-    `,
+      Permiso requerido:
+
+      IAM / APPLICATIONS / 777
+      `,
   })
   @ApiParam({
     name: 'id',
@@ -211,7 +214,7 @@ export class ApplicationsController {
     status: 404,
     description: 'Aplicación no encontrada',
   })
-  updateStatus(@Param('id') id: string, @Body('active') active: boolean) {
-    return this.applicationsService.updateStatus(id, active);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
+    return this.applicationsService.updateStatus(id, dto.active);
   }
 }

@@ -122,6 +122,9 @@ export class ResourcesService {
 
   async findAll(): Promise<Resource[]> {
     return this.resourceRepository.find({
+      where: {
+        active: true,
+      },
       order: {
         internal_name: 'ASC',
       },
@@ -183,6 +186,7 @@ export class ResourcesService {
 
   async updateStatus(id: string, active: boolean): Promise<Resource> {
     const resource = await this.findOne(id);
+    const previousActive = resource.active;
 
     const oldValues = {
       ...resource,
@@ -196,8 +200,17 @@ export class ResourcesService {
 
     const updated = await this.resourceRepository.save(resource);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE
+          : active
+            ? AUDIT_ACTIONS.ACTIVATE
+            : AUDIT_ACTIONS.DEACTIVATE;
+
     await this.auditLogService.record({
-      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      action,
       moduleName: 'IAM',
       entityName: AUDIT_ENTITIES.RESOURCE,
       recordId: updated.id,

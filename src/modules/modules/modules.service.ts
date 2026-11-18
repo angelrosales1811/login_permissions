@@ -107,6 +107,9 @@ export class ModulesService {
 
   async findAll(): Promise<Module[]> {
     return this.moduleRepository.find({
+      where: {
+        active: true,
+      },
       order: {
         display_order: 'ASC',
       },
@@ -162,6 +165,8 @@ export class ModulesService {
 
   async updateStatus(id: string, active: boolean): Promise<Module> {
     const module = await this.findOne(id);
+    const previousActive = module.active;
+
     const oldValues = {
       ...module,
     };
@@ -178,8 +183,17 @@ export class ModulesService {
 
     const updated = await this.moduleRepository.save(module);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE
+          : active
+            ? AUDIT_ACTIONS.ACTIVATE
+            : AUDIT_ACTIONS.DEACTIVATE;
+
     await this.auditLogService.record({
-      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      action,
       moduleName: 'IAM',
       entityName: AUDIT_ENTITIES.MODULE,
       recordId: updated.id,

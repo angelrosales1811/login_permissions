@@ -109,6 +109,9 @@ export class PermissionsService {
 
   async findAll(): Promise<Permission[]> {
     return this.permissionRepository.find({
+      where: {
+        active: true,
+      },
       order: {
         internal_name: 'ASC',
       },
@@ -206,6 +209,7 @@ export class PermissionsService {
 
   async updateStatus(id: string, active: boolean): Promise<Permission> {
     const permission = await this.findOne(id);
+    const previousActive = permission.active;
 
     const oldValues = {
       active: permission.active,
@@ -219,8 +223,17 @@ export class PermissionsService {
 
     const updated = await this.permissionRepository.save(permission);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE
+          : active
+            ? AUDIT_ACTIONS.ACTIVATE
+            : AUDIT_ACTIONS.DEACTIVATE;
+
     await this.auditLogService.record({
-      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      action,
 
       moduleName: 'IAM',
 

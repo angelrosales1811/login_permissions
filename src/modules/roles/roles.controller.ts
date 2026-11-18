@@ -149,17 +149,29 @@ export class RolesController {
 
   @Patch(':id/status')
   @ApiOperation({
-    summary: 'Activar o desactivar rol',
+    summary: 'Soft Delete de rol',
     description: `
-      Realiza baja lógica del rol.
+      Realiza eliminación lógica mediante la columna active.
 
-      Proceso interno:
+      No elimina registros físicamente.
 
-      Role Status Change
+      Proceso:
+
+      Role
       ↓
-      Permission Cache Auto-Rebuild
+      active = false
+      ↓
+      Audit Log
+      ↓
+      Permission Cache Rebuild
       ↓
       Usuarios afectados actualizados
+
+      Compatibilidad:
+      - 4A.16 Audit Log
+      - 4A.17 Historial de Cambios
+      - 4A.19 Auditoría de Accesos
+      - 4A.20 Observabilidad
 
       Permiso requerido:
 

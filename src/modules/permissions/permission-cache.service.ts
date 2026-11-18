@@ -29,6 +29,15 @@ export class PermissionCacheService {
     private readonly userProfileRepository: Repository<UserProfile>
   ) {}
 
+  /**
+   * permission_cache es una tabla derivada.
+   *
+   * El borrado físico está permitido porque:
+   * - No es información maestra.
+   * - No requiere historial.
+   * - Se reconstruye automáticamente.
+   * - No forma parte del alcance de Soft Delete (4A.18).
+   */
   async invalidateUser(userId: string): Promise<void> {
     await this.permissionCacheRepository.delete({
       user_id: userId,
@@ -68,6 +77,7 @@ export class PermissionCacheService {
     const relations = await this.rolePermissionRepository.find({
       where: {
         permission_id: permissionId,
+        active: true,
       },
     });
 
@@ -101,6 +111,15 @@ export class PermissionCacheService {
     }
   }
 
+  /**
+   * permission_cache es una tabla derivada.
+   *
+   * El borrado físico está permitido porque:
+   * - No es información maestra.
+   * - No requiere historial.
+   * - Se reconstruye automáticamente.
+   * - No forma parte del alcance de Soft Delete (4A.18).
+   */
   async generateUserPermissionCache(userId: string): Promise<number> {
     const userRoles = await this.userRoleRepository.find({
       where: {

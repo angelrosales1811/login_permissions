@@ -157,6 +157,9 @@ export class RolesService {
 
   async findAll(): Promise<Role[]> {
     return this.roleRepository.find({
+      where: {
+        active: true,
+      },
       order: {
         internal_name: 'ASC',
       },
@@ -221,6 +224,7 @@ export class RolesService {
 
   async updateStatus(id: string, active: boolean): Promise<Role> {
     const role = await this.findOne(id);
+    const previousActive = role.active;
 
     const oldValues = {
       active: role.active,
@@ -236,8 +240,17 @@ export class RolesService {
 
     await this.permissionCacheService.rebuildUsersByRole(id);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE
+          : active
+            ? AUDIT_ACTIONS.ACTIVATE
+            : AUDIT_ACTIONS.DEACTIVATE;
+
     await this.auditLogService.record({
-      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      action,
 
       moduleName: 'IAM',
 
@@ -537,32 +550,42 @@ export class RolesService {
 
     const matrix = new Map<string, PermissionMatrixResponseDto>();
 
+    const roleMap = new Map(roles.map((item) => [item.id, item]));
+
+    const resourceMap = new Map(resources.map((item) => [item.id, item]));
+
+    const permissionMap = new Map(permissions.map((item) => [item.id, item]));
+
+    const moduleMap = new Map(modules.map((item) => [item.id, item]));
+
+    const moduleResourceMap = new Map(moduleResources.map((item) => [item.resource_id, item]));
+
     for (const relation of rolePermissions) {
-      const role = roles.find((x) => x.id === relation.role_id);
+      const role = roleMap.get(relation.role_id);
 
       if (!role) {
         continue;
       }
 
-      const resource = resources.find((x) => x.id === relation.resource_id);
+      const resource = resourceMap.get(relation.resource_id);
 
       if (!resource) {
         continue;
       }
 
-      const permission = permissions.find((x) => x.id === relation.permission_id);
+      const permission = permissionMap.get(relation.permission_id);
 
       if (!permission) {
         continue;
       }
 
-      const moduleRelation = moduleResources.find((x) => x.resource_id === resource.id);
+      const moduleRelation = moduleResourceMap.get(resource.id);
 
       if (!moduleRelation) {
         continue;
       }
 
-      const module = modules.find((x) => x.id === moduleRelation.module_id);
+      const module = moduleMap.get(moduleRelation.module_id);
 
       if (!module) {
         continue;

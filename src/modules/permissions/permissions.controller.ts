@@ -229,9 +229,11 @@ export class PermissionsController {
 
   @Post('cache/rebuild-all')
   @ApiOperation({
-    summary: 'Reconstruir todos los caches RBAC',
+    summary: 'Soft Delete de rol',
     description: `
-      Regenera permission_cache para todos los usuarios activos.
+      Realiza eliminación lógica mediante la columna active.
+
+      No elimina registros físicamente.
 
       Proceso:
 

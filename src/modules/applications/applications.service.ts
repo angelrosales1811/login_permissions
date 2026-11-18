@@ -69,6 +69,9 @@ export class ApplicationsService {
 
   async findAll(): Promise<Application[]> {
     return this.applicationRepository.find({
+      where: {
+        active: true,
+      },
       order: {
         name: 'ASC',
       },
@@ -136,6 +139,8 @@ export class ApplicationsService {
 
   async updateStatus(id: string, active: boolean): Promise<Application> {
     const application = await this.findOne(id);
+    const previousActive = application.active;
+
     const oldValues = {
       active: application.active,
     };
@@ -147,9 +152,17 @@ export class ApplicationsService {
 
     const updated = await this.applicationRepository.save(application);
 
-    await this.auditLogService.record({
-      action: active ? AUDIT_ACTIONS.ACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE
+          : active
+            ? AUDIT_ACTIONS.ACTIVATE
+            : AUDIT_ACTIONS.DEACTIVATE;
 
+    await this.auditLogService.record({
+      action,
       moduleName: 'IAM',
       entityName: AUDIT_ENTITIES.APPLICATION,
       recordId: updated.id,

@@ -8,6 +8,7 @@ import { PermissionsGuard } from '../auth/guards/permission.guard';
 
 import { ModulesService } from './modules.service';
 
+import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 
@@ -162,26 +163,28 @@ export class ModulesController {
 
   @Patch(':id/status')
   @ApiOperation({
-    summary: 'Cambiar estatus del módulo',
+    summary: 'Soft Delete de rol',
     description: `
-    Activa o desactiva un módulo del sistema.
+      Realiza eliminación lógica mediante la columna active.
 
-    Impacto funcional:
+      No elimina registros físicamente.
 
-    Module Status
-    ↓
-    Role Modules
-    ↓
-    Permission Cache Auto-Rebuild
-    ↓
-    Menús dinámicos
-    ↓
-    Disponibilidad funcional
+      Proceso:
 
-    Permiso requerido:
+      Module Status
+      ↓
+      Role Modules
+      ↓
+      Permission Cache Auto-Rebuild
+      ↓
+      Menús dinámicos
+      ↓
+      Disponibilidad funcional
 
-    IAM / MODULES / 777
-    `,
+      Permiso requerido:
+
+      IAM / MODULES / 777
+      `,
   })
   @ApiParam({
     name: 'id',
@@ -196,7 +199,7 @@ export class ModulesController {
     description: 'Módulo no encontrado',
   })
   @Permissions('IAM', 'MODULES', '777')
-  updateStatus(@Param('id') id: string, @Body('active') active: boolean) {
-    return this.modulesService.updateStatus(id, active);
+  updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
+    return this.modulesService.updateStatus(id, dto.active);
   }
 }

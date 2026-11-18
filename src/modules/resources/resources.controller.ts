@@ -171,26 +171,28 @@ export class ResourcesController {
 
   @Patch(':id/status')
   @ApiOperation({
-    summary: 'Activar o desactivar recurso',
+    summary: 'Soft Delete de rol',
     description: `
-    Realiza la activación o desactivación lógica del recurso.
+      Realiza eliminación lógica mediante la columna active.
 
-    Impacto funcional:
+      No elimina registros físicamente.
 
-    Resource Status
-    ↓
-    Role Permissions
-    ↓
-    Permission Cache Invalidate
-    ↓
-    Permission Cache Rebuild
-    ↓
-    JWT actualizado
+      Proceso:
 
-    Permiso requerido:
+      Resource Status
+      ↓
+      Role Permissions
+      ↓
+      Permission Cache Invalidate
+      ↓
+      Permission Cache Rebuild
+      ↓
+      JWT actualizado
 
-    IAM / RESOURCES / 777
-    `,
+      Permiso requerido:
+
+      IAM / RESOURCES / 777
+      `,
   })
   @ApiParam({
     name: 'id',
