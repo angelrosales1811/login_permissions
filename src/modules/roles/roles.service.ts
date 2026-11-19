@@ -21,6 +21,7 @@ import { Resource } from '../resources/entities/resource.entity';
 
 import { UpdateRoleModulesDto } from './dto/update-role-modules.dto';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { AuditContextService } from '../../common/services/audit-context.service';
 import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
@@ -155,11 +156,22 @@ export class RolesService {
     return saved;
   }
 
-  async findAll(): Promise<Role[]> {
+  async findAll(query?: CatalogFilterDto): Promise<Role[]> {
+    let where = {};
+
+    if (!query?.includeInactive) {
+      where =
+        query?.active !== undefined
+          ? {
+              active: query.active,
+            }
+          : {
+              active: true,
+            };
+    }
+
     return this.roleRepository.find({
-      where: {
-        active: true,
-      },
+      where,
       order: {
         internal_name: 'ASC',
       },

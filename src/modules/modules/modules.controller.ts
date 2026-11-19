@@ -1,6 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { Permissions } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,6 +15,7 @@ import { PermissionsGuard } from '../auth/guards/permission.guard';
 
 import { ModulesService } from './modules.service';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
@@ -66,18 +74,28 @@ export class ModulesController {
   @ApiOperation({
     summary: 'Obtener módulos',
     description: `
-    Obtiene el catálogo completo de módulos registrados.
+      Por defecto retorna únicamente registros activos.
 
-    Utilizado por:
+      Filtros disponibles:
 
-    - Menú dinámico
-    - Administración IAM
-    - Matriz RBAC
-    - Role Modules
+      GET ?active=true
+      Retorna activos.
 
-    Permiso requerido:
+      GET ?active=false
+      Retorna inactivos.
 
-    IAM / MODULES / 444
+      GET ?includeInactive=true
+      Retorna activos e inactivos.
+
+      Utilizado para:
+      - Soft Delete
+      - Reactivación
+      - Auditoría
+      - Administración IAM
+      
+      Permiso requerido:
+
+      IAM / MODULES / 444
     `,
   })
   @ApiResponse({
@@ -85,8 +103,19 @@ export class ModulesController {
     description: 'Listado de módulos obtenido correctamente',
   })
   @Permissions('IAM', 'MODULES', '444')
-  findAll() {
-    return this.modulesService.findAll();
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  findAll(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.modulesService.findAll(query);
   }
 
   @Get(':id')

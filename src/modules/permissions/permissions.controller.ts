@@ -1,10 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { Permissions } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { CreatePermissionDto } from './dto/create-permission.dto';
 import { UpdatePermissionStatusDto } from './dto/update-permission-status.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
@@ -52,13 +60,24 @@ export class PermissionsController {
   @ApiOperation({
     summary: 'Listar permisos',
     description: `
-      Obtiene todos los permisos registrados.
+      Por defecto retorna únicamente registros activos.
 
-      Utilizado por:
+      Filtros disponibles:
 
-      - Matriz RBAC
+      GET ?active=true
+      Retorna activos.
+
+      GET ?active=false
+      Retorna inactivos.
+
+      GET ?includeInactive=true
+      Retorna activos e inactivos.
+
+      Utilizado para:
+      - Soft Delete
+      - Reactivación
+      - Auditoría
       - Administración IAM
-      - Asignación Role Permissions
       `,
   })
   @ApiResponse({
@@ -66,8 +85,19 @@ export class PermissionsController {
     description: 'Listado de permisos',
   })
   @Permissions('IAM', 'PERMISSIONS', '444')
-  findAll() {
-    return this.permissionsService.findAll();
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  findAll(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.permissionsService.findAll(query);
   }
 
   @Get('cache-health')

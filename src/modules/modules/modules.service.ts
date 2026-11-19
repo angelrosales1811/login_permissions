@@ -12,6 +12,7 @@ import { Resource } from '../resources/entities/resource.entity';
 import { ModuleResource } from './entities/module-resource.entity';
 import { Module } from './entities/module.entity';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 
@@ -105,13 +106,24 @@ export class ModulesService {
     return saved;
   }
 
-  async findAll(): Promise<Module[]> {
+  async findAll(query?: CatalogFilterDto): Promise<Module[]> {
+    let where = {};
+
+    if (!query?.includeInactive) {
+      where =
+        query?.active !== undefined
+          ? {
+              active: query.active,
+            }
+          : {
+              active: true,
+            };
+    }
+
     return this.moduleRepository.find({
-      where: {
-        active: true,
-      },
+      where,
       order: {
-        display_order: 'ASC',
+        internal_name: 'ASC',
       },
     });
   }

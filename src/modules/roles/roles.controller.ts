@@ -1,5 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { PermissionsGuard } from '../auth/guards/permission.guard';
@@ -12,6 +19,7 @@ import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 
 import { UpdateRoleStatusDto } from './dto/update-role-status.dto';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RolesService } from './roles.service';
 
@@ -54,25 +62,49 @@ export class RolesController {
   }
 
   @Get()
+  @Permissions('IAM', 'ROLES', '444')
   @ApiOperation({
     summary: 'Listar roles',
     description: `
-      Obtiene todos los roles registrados.
+      Por defecto retorna únicamente registros activos.
 
-      Utilizado por:
+      Filtros disponibles:
 
+      GET ?active=true
+      Retorna activos.
+
+      GET ?active=false
+      Retorna inactivos.
+
+      GET ?includeInactive=true
+      Retorna activos e inactivos.
+
+      Utilizado para:
+      - Soft Delete
+      - Reactivación
+      - Auditoría
       - Administración IAM
-      - Asignación User Roles
-      - Matriz RBAC
       `,
   })
   @ApiResponse({
     status: 200,
     description: 'Listado de roles',
   })
-  @Permissions('IAM', 'ROLES', '444')
-  findAll() {
-    return this.rolesService.findAll();
+  @ApiQuery({
+    name: 'active',
+    required: false,
+    example: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+    example: true,
+  })
+  findAll(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.rolesService.findAll(query);
   }
 
   @Get('permission-matrix')

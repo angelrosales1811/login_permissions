@@ -11,6 +11,7 @@ import { UpdateApplicationDto } from './dto/update-application.dto';
 
 import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
 import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { AuditContextService } from '../../common/services/audit-context.service';
 import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { AuditLogService } from '../../common/services/audit-log.service';
@@ -67,11 +68,22 @@ export class ApplicationsService {
     return saved;
   }
 
-  async findAll(): Promise<Application[]> {
+  async findAll(query?: CatalogFilterDto): Promise<Application[]> {
+    let where = {};
+
+    if (!query?.includeInactive) {
+      where =
+        query?.active !== undefined
+          ? {
+              active: query.active,
+            }
+          : {
+              active: true,
+            };
+    }
+
     return this.applicationRepository.find({
-      where: {
-        active: true,
-      },
+      where,
       order: {
         name: 'ASC',
       },

@@ -1,10 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { Permissions } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
@@ -74,18 +82,27 @@ export class ResourcesController {
   @ApiOperation({
     summary: 'Listar recursos',
     description: `
-    Obtiene todos los recursos registrados.
+      Por defecto retorna únicamente registros activos.
 
-    Utilizado por:
+      Filtros disponibles:
 
-    - Administración IAM
-    - Role Permissions
-    - Matriz RBAC
-    - Permission Cache
+      GET ?active=true
+      Retorna activos.
 
-    Permiso requerido:
+      GET ?active=false
+      Retorna inactivos.
 
-    IAM / RESOURCES / 444
+      GET ?includeInactive=true
+      Retorna activos e inactivos.
+
+      Utilizado para:
+      - Soft Delete
+      - Reactivación
+      - Auditoría
+      - Administración IAM
+      Permiso requerido:
+
+      IAM / RESOURCES / 444
     `,
   })
   @ApiResponse({
@@ -93,8 +110,19 @@ export class ResourcesController {
     description: 'Listado de recursos obtenido correctamente',
   })
   @Permissions('IAM', 'RESOURCES', '444')
-  findAll() {
-    return this.resourcesService.findAll();
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  findAll(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.resourcesService.findAll(query);
   }
 
   @Get(':id')

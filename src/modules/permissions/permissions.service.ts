@@ -17,6 +17,8 @@ import { CreatePermissionDto } from './dto/create-permission.dto';
 
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
+
 import { AuditContextService } from '../../common/services/audit-context.service';
 
 import { AuditEntityService } from '../../common/services/audit-entity.service';
@@ -107,11 +109,22 @@ export class PermissionsService {
     return saved;
   }
 
-  async findAll(): Promise<Permission[]> {
+  async findAll(query?: CatalogFilterDto): Promise<Permission[]> {
+    let where = {};
+
+    if (!query?.includeInactive) {
+      where =
+        query?.active !== undefined
+          ? {
+              active: query.active,
+            }
+          : {
+              active: true,
+            };
+    }
+
     return this.permissionRepository.find({
-      where: {
-        active: true,
-      },
+      where,
       order: {
         internal_name: 'ASC',
       },

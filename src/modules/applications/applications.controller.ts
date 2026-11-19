@@ -1,6 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
@@ -9,6 +16,7 @@ import { Permissions } from '../auth/decorators/permission.decorator';
 
 import { ApplicationsService } from './applications.service';
 
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -75,27 +83,47 @@ export class ApplicationsController {
   @ApiOperation({
     summary: 'Obtener aplicaciones',
     description: `
-    Obtiene todas las aplicaciones registradas.
+      Por defecto retorna únicamente registros activos.
 
-    Utilizado por:
+      Filtros disponibles:
 
-    - Administración IAM
-    - Módulos
-    - Recursos
-    - Matriz RBAC
-    - Menú dinámico
+      GET ?active=true
+      Retorna activos.
 
-    Permiso requerido:
+      GET ?active=false
+      Retorna inactivos.
 
-    IAM / APPLICATIONS / 444
+      GET ?includeInactive=true
+      Retorna activos e inactivos.
+
+      Utilizado para:
+      - Soft Delete
+      - Reactivación
+      - Auditoría
+      - Administración IAM
+
+      Permiso requerido:
+
+      IAM / APPLICATIONS / 444
     `,
   })
   @ApiResponse({
     status: 200,
     description: 'Listado de aplicaciones obtenido correctamente',
   })
-  findAll() {
-    return this.applicationsService.findAll();
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  findAll(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.applicationsService.findAll(query);
   }
 
   @Get(':id')
