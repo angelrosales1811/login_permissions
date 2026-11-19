@@ -1,61 +1,128 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { CreateNavigationDto } from './dto/create-navigation.dto';
-import { UpdateNavigationDto } from './dto/update-navigation.dto';
 import { NavigationService } from './navigation.service';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Permissions } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permission.guard';
+
 import { AuthUser } from '../auth/interfaces/auth-user.interface';
+import { CreateMenuDto } from './dto/create-menu.dto';
+import { UpdateMenuDto } from './dto/update-menu.dto';
 
 @ApiTags('Navigation')
 @Controller('navigation')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class NavigationController {
   constructor(private readonly navigationService: NavigationService) {}
 
-  @Post()
+  @Post('menus')
+  @Permissions('IAM', 'NAVIGATION', '755')
   @ApiOperation({
-    summary: 'Crear elemento de navegación',
+    summary: 'Crear menú',
     description: `
-    Crea un nuevo registro de navegación.
+      Crea un nuevo menú navegable.
 
-    Utilizado para construir:
+      Compatible con:
+      - Menu Items
+      - Menu Permissions
+      - My Menu
 
-    - Menús
-    - Submenús
-    - Accesos dinámicos
-
-    Base futura para navegación RBAC.
-    `,
+      Fase 1 Navegación Dinámica.
+      `,
   })
   @ApiResponse({
     status: 201,
-    description: 'Elemento de navegación creado correctamente',
+    description: 'Menú creado correctamente',
   })
-  create(@Body() createNavigationDto: CreateNavigationDto) {
-    return this.navigationService.create(createNavigationDto);
+  @ApiResponse({
+    status: 409,
+    description: 'Ya existe un menú con el mismo nombre o displayOrder para la aplicación',
+  })
+  createMenu(@Body() dto: CreateMenuDto) {
+    return this.navigationService.createMenu(dto);
   }
 
-  @Get()
+  @Get('menus')
+  @Permissions('IAM', 'NAVIGATION', '444')
   @ApiOperation({
-    summary: 'Listar navegación',
-    description: `
-    Obtiene todos los registros de navegación.
-
-    Utilizado para:
-
-    - Administración de menú
-    - Configuración de navegación
-    - Diagnóstico
-    `,
+    summary: 'Listar menús',
   })
   @ApiResponse({
     status: 200,
-    description: 'Listado de navegación obtenido correctamente',
+    description: 'Listado de menús',
   })
-  findAll() {
-    return this.navigationService.findAll();
+  findMenus(@Query('active') active?: string) {
+    return this.navigationService.findMenus(active !== 'false');
+  }
+
+  @Get('menus/:id')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del menú',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú encontrado',
+  })
+  findMenuById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.findMenuById(id);
+  }
+
+  @Patch('menus/:id')
+  @Permissions('IAM', 'NAVIGATION', '644')
+  @ApiOperation({
+    summary: 'Actualizar menú',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú actualizado',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto de displayOrder dentro de la aplicación',
+  })
+  updateMenu(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMenuDto) {
+    return this.navigationService.updateMenu(id, dto);
+  }
+
+  @Patch('menus/:id/deactivate')
+  @Permissions('IAM', 'NAVIGATION', '777')
+  @ApiOperation({
+    summary: 'Desactivar menú',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú desactivado',
+  })
+  deactivateMenu(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.deactivateMenu(id);
+  }
+
+  @Patch('menus/:id/reactivate')
+  @Permissions('IAM', 'NAVIGATION', '777')
+  @ApiOperation({
+    summary: 'Reactivar menú',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú reactivado',
+  })
+  reactivateMenu(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.reactivateMenu(id);
   }
 
   @Get('my-menu')
@@ -63,24 +130,24 @@ export class NavigationController {
   @ApiOperation({
     summary: 'Obtener menú dinámico del usuario',
     description: `
-    Genera el menú visible para el usuario autenticado.
+      Genera el menú visible para el usuario autenticado.
 
-    Flujo:
+      Flujo:
 
-    JWT
-    ↓
-    Roles
-    ↓
-    Permission Cache
-    ↓
-    Role Modules
-    ↓
-    Navigation
-    ↓
-    Menú final
+      JWT
+      ↓
+      Roles
+      ↓
+      Permission Cache
+      ↓
+      Role Modules
+      ↓
+      Navigation
+      ↓
+      Menú final
 
-    Sólo devuelve opciones autorizadas para el usuario.
-    `,
+      Sólo devuelve opciones autorizadas para el usuario.
+      `,
   })
   @ApiResponse({
     status: 200,
@@ -109,85 +176,5 @@ export class NavigationController {
   @UseGuards(JwtAuthGuard)
   async getMyMenu(@CurrentUser() user: AuthUser) {
     return this.navigationService.getMenusByUser(user.id);
-  }
-
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Consultar elemento de navegación',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Identificador del registro de navegación',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Elemento encontrado',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Elemento no encontrado',
-  })
-  findOne(@Param('id') id: string) {
-    return this.navigationService.findOne(+id);
-  }
-
-  @Patch(':id')
-  @ApiOperation({
-    summary: 'Actualizar elemento de navegación',
-    description: `
-    Permite modificar propiedades de navegación:
-
-    - Nombre
-    - Ruta
-    - Orden
-    - Visibilidad
-    - Configuración visual
-
-    No modifica permisos RBAC.
-    `,
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Identificador del registro',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Elemento actualizado correctamente',
-  })
-  update(@Param('id') id: string, @Body() updateNavigationDto: UpdateNavigationDto) {
-    return this.navigationService.update(+id, updateNavigationDto);
-  }
-
-  @Delete(':id')
-  @ApiOperation({
-    summary: 'Eliminar elemento de navegación',
-    description: `
-    Elimina un registro del sistema de navegación.
-
-    Impacto:
-
-    Navigation
-    ↓
-    Menús disponibles
-    ↓
-    Interfaz del usuario
-
-    Utilizar únicamente para limpieza administrativa.
-    `,
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Identificador del registro',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Elemento eliminado correctamente',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Elemento no encontrado',
-  })
-  remove(@Param('id') id: string) {
-    return this.navigationService.remove(+id);
   }
 }

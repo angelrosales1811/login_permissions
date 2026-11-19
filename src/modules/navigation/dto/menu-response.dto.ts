@@ -1,7 +1,7 @@
 export class MenuItemResponseDto {
-  id: string;
+  id!: string;
 
-  name: string;
+  name!: string;
 
   route?: string;
 
@@ -9,11 +9,11 @@ export class MenuItemResponseDto {
 }
 
 export class MenuResponseDto {
-  id: string;
+  id!: string;
 
-  name: string;
+  name!: string;
 
   icon?: string;
 
-  items: MenuItemResponseDto[];
+  items!: MenuItemResponseDto[];
 }
