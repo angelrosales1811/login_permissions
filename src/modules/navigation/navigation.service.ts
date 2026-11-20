@@ -24,7 +24,11 @@ import { DataSource, Repository } from 'typeorm';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { MenuPermissionEntity } from './entities/menu-permission.entity';
 
+import { Module } from '../modules/entities/module.entity';
+import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { MenuItemResponseDto, MenuResponseDto } from './dto/menu-response.dto';
+import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
+import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 
 type PermissionRow = {
   permission_id: string;
@@ -47,6 +51,9 @@ export class NavigationService {
 
     @InjectRepository(Menu)
     private readonly menuRepository: Repository<Menu>,
+
+    @InjectRepository(Module)
+    private readonly moduleRepository: Repository<Module>,
 
     private readonly auditContextService: AuditContextService,
     private readonly auditEntityService: AuditEntityService,
@@ -215,6 +222,18 @@ export class NavigationService {
     return menu;
   }
 
+  async findMenuItemById(id: string): Promise<MenuItemEntity> {
+    const item = await this.menuItemRepository.findOne({
+      where: { id },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Menu Item no encontrado');
+    }
+
+    return item;
+  }
+
   async updateMenu(id: string, dto: UpdateMenuDto): Promise<Menu> {
     const menu = await this.findMenuById(id);
 
@@ -337,6 +356,276 @@ export class NavigationService {
       action: AUDIT_ACTIONS.REACTIVATE_MENU,
       moduleName: AUDIT_MODULES.NAVIGATION,
       entityName: AUDIT_ENTITIES.MENU,
+      recordId: updated.id,
+      applicationId: updated.applicationId,
+      oldValues,
+      newValues: {
+        active: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async createMenuItem(dto: CreateMenuItemDto): Promise<MenuItemEntity> {
+    await this.findMenuById(dto.menu_id);
+
+    const module = await this.moduleRepository.findOne({
+      where: {
+        id: dto.module_id,
+        active: true,
+      },
+    });
+
+    if (!module) {
+      throw new NotFoundException('Módulo no encontrado');
+    }
+
+    const exists = await this.menuItemRepository.findOne({
+      where: {
+        menuId: dto.menu_id,
+        displayOrder: dto.display_order,
+        active: true,
+      },
+    });
+
+    if (exists) {
+      throw new ConflictException(`Ya existe un Menu Item con displayOrder ${dto.display_order}`);
+    }
+
+    const item = this.menuItemRepository.create({
+      menuId: dto.menu_id,
+      moduleId: dto.module_id,
+      internalName: dto.internal_name,
+      externalName: dto.external_name,
+      route: dto.route,
+      icon: dto.icon,
+      displayOrder: dto.display_order,
+      applicationId: dto.application_id,
+      active: true,
+    });
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyCreationAudit(item, context);
+
+    const saved = await this.menuItemRepository.save(item);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE_MENU_ITEM,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_ITEM,
+      recordId: saved.id,
+      applicationId: saved.applicationId,
+      newValues: { ...saved },
+    });
+
+    return saved;
+  }
+
+  async findMenuItems(menuId: string): Promise<MenuItemEntity[]> {
+    return this.menuItemRepository.find({
+      where: {
+        menuId,
+        active: true,
+      },
+      order: {
+        displayOrder: 'ASC',
+      },
+    });
+  }
+
+  async updateMenuItem(id: string, dto: UpdateMenuItemDto): Promise<MenuItemEntity> {
+    const menuItem = await this.findMenuItemById(id);
+
+    const oldValues = { ...menuItem };
+
+    if (dto.display_order !== undefined && dto.display_order !== menuItem.displayOrder) {
+      const duplicateOrder = await this.menuItemRepository.findOne({
+        where: {
+          menuId: menuItem.menuId,
+          displayOrder: dto.display_order,
+          active: true,
+        },
+      });
+
+      if (duplicateOrder && duplicateOrder.id !== menuItem.id) {
+        throw new ConflictException(
+          `Ya existe un Menu Item activo con displayOrder ${dto.display_order}`
+        );
+      }
+    }
+
+    if (dto.module_id !== undefined) {
+      const module = await this.moduleRepository.findOne({
+        where: {
+          id: dto.module_id,
+          active: true,
+        },
+      });
+
+      if (!module) {
+        throw new NotFoundException('Módulo no encontrado');
+      }
+
+      menuItem.moduleId = dto.module_id;
+    }
+
+    menuItem.internalName = dto.internal_name ?? menuItem.internalName;
+
+    menuItem.externalName = dto.external_name ?? menuItem.externalName;
+
+    menuItem.route = dto.route ?? menuItem.route;
+
+    menuItem.icon = dto.icon ?? menuItem.icon;
+
+    menuItem.displayOrder = dto.display_order ?? menuItem.displayOrder;
+
+    menuItem.applicationId = dto.application_id ?? menuItem.applicationId;
+
+    const context = this.auditContextService.getContext();
+
+    if (!context.userId) {
+      throw new UnauthorizedException('Audit context not initialized');
+    }
+
+    this.auditEntityService.applyUpdateAudit(menuItem, context);
+
+    const updated = await this.menuItemRepository.save(menuItem);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE_MENU_ITEM,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_ITEM,
+      recordId: updated.id,
+      applicationId: updated.applicationId,
+      oldValues,
+      newValues: { ...updated },
+    });
+
+    return updated;
+  }
+
+  //////////To DO Método reorderMenuItem
+  async reorderMenuItem(id: string, dto: ReorderMenuItemDto): Promise<MenuItemEntity> {
+    const menuItem = await this.findMenuItemById(id);
+
+    const oldValues = {
+      displayOrder: menuItem.displayOrder,
+    };
+
+    const duplicateOrder = await this.menuItemRepository.findOne({
+      where: {
+        menuId: menuItem.menuId,
+        displayOrder: dto.display_order,
+        active: true,
+      },
+    });
+
+    if (duplicateOrder && duplicateOrder.id !== menuItem.id) {
+      throw new ConflictException(
+        `Ya existe un Menu Item activo con displayOrder ${dto.display_order}`
+      );
+    }
+
+    menuItem.displayOrder = dto.display_order;
+
+    const context = this.auditContextService.getContext();
+
+    if (!context.userId) {
+      throw new UnauthorizedException('Audit context not initialized');
+    }
+
+    this.auditEntityService.applyUpdateAudit(menuItem, context);
+
+    const updated = await this.menuItemRepository.save(menuItem);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.REORDER_MENU_ITEM,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_ITEM,
+      recordId: updated.id,
+      applicationId: updated.applicationId,
+      oldValues,
+      newValues: {
+        displayOrder: updated.displayOrder,
+      },
+    });
+
+    return updated;
+  }
+  //////////To DO Método deactivateMenuItem
+  async deactivateMenuItem(id: string): Promise<MenuItemEntity> {
+    const menuItem = await this.findMenuItemById(id);
+
+    const oldValues = {
+      active: menuItem.active,
+    };
+
+    menuItem.active = false;
+
+    const context = this.auditContextService.getContext();
+
+    if (!context.userId) {
+      throw new UnauthorizedException('Audit context not initialized');
+    }
+
+    this.auditEntityService.applyUpdateAudit(menuItem, context);
+
+    const updated = await this.menuItemRepository.save(menuItem);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.DEACTIVATE_MENU_ITEM,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_ITEM,
+      recordId: updated.id,
+      applicationId: updated.applicationId,
+      oldValues,
+      newValues: {
+        active: false,
+      },
+    });
+
+    return updated;
+  }
+  //////////To DO Método reactivateMenuItem
+  async reactivateMenuItem(id: string): Promise<MenuItemEntity> {
+    const menuItem = await this.findMenuItemById(id);
+
+    const oldValues = {
+      active: menuItem.active,
+    };
+
+    const duplicateOrder = await this.menuItemRepository.findOne({
+      where: {
+        menuId: menuItem.menuId,
+        displayOrder: menuItem.displayOrder,
+        active: true,
+      },
+    });
+
+    if (duplicateOrder && duplicateOrder.id !== menuItem.id) {
+      throw new ConflictException(
+        `Ya existe un Menu Item activo con displayOrder ${menuItem.displayOrder}`
+      );
+    }
+
+    menuItem.active = true;
+
+    const context = this.auditContextService.getContext();
+
+    if (!context.userId) {
+      throw new UnauthorizedException('Audit context not initialized');
+    }
+
+    this.auditEntityService.applyUpdateAudit(menuItem, context);
+
+    const updated = await this.menuItemRepository.save(menuItem);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.REACTIVATE_MENU_ITEM,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_ITEM,
       recordId: updated.id,
       applicationId: updated.applicationId,
       oldValues,

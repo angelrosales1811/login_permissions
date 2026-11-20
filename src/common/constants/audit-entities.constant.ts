@@ -22,4 +22,5 @@ export const AUDIT_ENTITIES = {
   USER_ACCESS: 'USER_ACCESS',
 
   MENU: 'MENU',
+  MENU_ITEM: 'MENU_ITEM',
 } as const;

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Module as ModuleEntity } from '../modules/entities/module.entity';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { MenuPermissionEntity } from './entities/menu-permission.entity';
 import { Menu } from './entities/menu.entity';
@@ -20,6 +21,7 @@ import { NavigationService } from './navigation.service';
       AuditLogService,
       AuditContextService,
       AuditEntityService,
+      ModuleEntity,
     ]),
   ],
   controllers: [NavigationController],

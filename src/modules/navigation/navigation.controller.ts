@@ -22,6 +22,10 @@ import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
 
+import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
+import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+
 @ApiTags('Navigation')
 @Controller('navigation')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -176,5 +180,115 @@ export class NavigationController {
   @UseGuards(JwtAuthGuard)
   async getMyMenu(@CurrentUser() user: AuthUser) {
     return this.navigationService.getMenusByUser(user.id);
+  }
+
+  /////////////////////////////
+
+  @Post('menu-items')
+  @Permissions('IAM', 'NAVIGATION', '755')
+  @ApiOperation({
+    summary: 'Crear Menu Item',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Menu Item creado correctamente',
+  })
+  createMenuItem(
+    @Body()
+    dto: CreateMenuItemDto
+  ) {
+    return this.navigationService.createMenuItem(dto);
+  }
+
+  @Get('menus/:id/items')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Listar items del menú',
+  })
+  findMenuItems(
+    @Param('id', ParseUUIDPipe)
+    id: string
+  ) {
+    return this.navigationService.findMenuItems(id);
+  }
+
+  ///////////////////To Do @Get('menu-items/:id')
+  @Get('menu-items/:id')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del menúItem',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'menúItem encontrado',
+  })
+  findMenuItemById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.findMenuItemById(id);
+  }
+
+  ///////////////////To Do @Patch('menu-items/:id')
+  @Patch('menu-items/:id')
+  @Permissions('IAM', 'NAVIGATION', '644')
+  @ApiOperation({
+    summary: 'Actualizar Menu Item',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menu Item actualizado',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto de displayOrder dentro del menú',
+  })
+  updateMenuItem(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateMenuItemDto) {
+    return this.navigationService.updateMenuItem(id, dto);
+  }
+  ///////////////////To Do @Patch('menu-items/:id/order')
+  @Patch('menu-items/:id/order')
+  @Permissions('IAM', 'NAVIGATION', '644')
+  @ApiOperation({
+    summary: 'Reordenar Menu Item',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Orden actualizado correctamente',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Ya existe un Menu Item con ese displayOrder',
+  })
+  reorderMenuItem(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReorderMenuItemDto) {
+    return this.navigationService.reorderMenuItem(id, dto);
+  }
+  ///////////////////To Do @Patch('menu-items/:id/deactivate',)
+  @Patch('menu-items/:id/deactivate')
+  @Permissions('IAM', 'NAVIGATION', '777')
+  @ApiOperation({
+    summary: 'Desactivar Menu Item',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menu Item desactivado',
+  })
+  deactivateMenuItem(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.deactivateMenuItem(id);
+  }
+  ///////////////////To Do @Patch('menu-items/:id/reactivate',)
+  @Patch('menu-items/:id/reactivate')
+  @Permissions('IAM', 'NAVIGATION', '777')
+  @ApiOperation({
+    summary: 'Reactivar Menu Item',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menu Item reactivado',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto de displayOrder dentro del menú',
+  })
+  reactivateMenuItem(@Param('id', ParseUUIDPipe) id: string) {
+    return this.navigationService.reactivateMenuItem(id);
   }
 }
