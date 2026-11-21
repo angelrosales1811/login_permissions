@@ -13,6 +13,10 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { NavigationController } from './navigation.controller';
 import { NavigationService } from './navigation.service';
 
+import { AuditLog } from '../audit/entities/audit-log.entity';
+import { RolePermission } from '../roles/entities/role-permission.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -24,6 +28,9 @@ import { NavigationService } from './navigation.service';
       AuditEntityService,
       ModuleEntity,
       Permission,
+      UserRole,
+      RolePermission,
+      AuditLog,
     ]),
   ],
   controllers: [NavigationController],

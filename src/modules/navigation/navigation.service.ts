@@ -34,6 +34,13 @@ import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { UpdateMenuPermissionsDto } from './dto/update-menu-permissions.dto';
 
+import { AuditLog } from '../audit/entities/audit-log.entity';
+import { RolePermission } from '../roles/entities/role-permission.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
+
+import { NavigationHistoryQueryDto } from './dto/navigation-history-query.dto';
+//import { NavigationExportQueryDto } from './dto/navigation-export-query.dto';
+
 type PermissionRow = {
   permission_id: string;
 };
@@ -41,9 +48,6 @@ type PermissionRow = {
 @Injectable()
 export class NavigationService {
   constructor(
-    // @InjectRepository(MenuEntity)
-    // private readonly menuRepository: Repository<MenuEntity>,
-
     @InjectRepository(MenuItemEntity)
     private readonly menuItemRepository: Repository<MenuItemEntity>,
 
@@ -62,11 +66,78 @@ export class NavigationService {
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
 
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
+
+    @InjectRepository(RolePermission)
+    private readonly rolePermissionRepository: Repository<RolePermission>,
+
+    @InjectRepository(AuditLog)
+    private readonly auditRepository: Repository<AuditLog>,
+
     private readonly auditContextService: AuditContextService,
     private readonly auditEntityService: AuditEntityService,
     private readonly auditLogService: AuditLogService
   ) {}
 
+  private async buildMenusFromPermissionIds(permissionIds: string[]): Promise<MenuResponseDto[]> {
+    if (!permissionIds.length) {
+      return [];
+    }
+
+    const menuPermissions = await this.menuPermissionRepository
+      .createQueryBuilder('mp')
+      .where('mp.active = true')
+      .andWhere('mp.permissionId IN (:...permissionIds)', {
+        permissionIds,
+      })
+      .getMany();
+
+    if (!menuPermissions.length) {
+      return [];
+    }
+
+    const menuItemIds = menuPermissions.map((item) => item.menuItemId);
+
+    const menuItems = await this.menuItemRepository
+      .createQueryBuilder('mi')
+      .where('mi.active = true')
+      .andWhere('mi.id IN (:...menuItemIds)', {
+        menuItemIds,
+      })
+      .orderBy('mi.displayOrder', 'ASC')
+      .getMany();
+
+    if (!menuItems.length) {
+      return [];
+    }
+
+    const menuIds = [...new Set(menuItems.map((item) => item.menuId))];
+
+    const menus = await this.menuRepository
+      .createQueryBuilder('m')
+      .where('m.active = true')
+      .andWhere('m.id IN (:...menuIds)', {
+        menuIds,
+      })
+      .orderBy('m.displayOrder', 'ASC')
+      .getMany();
+
+    return menus.map((menu) => ({
+      id: menu.id,
+      name: menu.externalName,
+      icon: menu.icon,
+      items: menuItems
+        .filter((item) => item.menuId === menu.id)
+        .map((item) => ({
+          id: item.id,
+          name: item.externalName,
+          route: item.route ?? undefined,
+          icon: item.icon ?? undefined,
+        })),
+    }));
+  }
+  /////////////////////////////////
   async getMenusByUser(userId: string): Promise<MenuResponseDto[]> {
     const permissions: PermissionRow[] = await this.dataSource.query(
       `
@@ -141,7 +212,130 @@ export class NavigationService {
       });
     }
 
-    return response;
+    return this.buildMenusFromPermissionIds(permissionIds);
+  }
+  ////////////////////////////////
+  async getMenuSimulationByUser(userId: string): Promise<MenuResponseDto[]> {
+    const menus = await this.getMenusByUser(userId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.SIMULATE_USER_MENU,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: userId,
+      newValues: {
+        simulatedUserId: userId,
+      },
+    });
+
+    return menus;
+  }
+
+  async getMenuSimulationByRole(roleId: string): Promise<MenuResponseDto[]> {
+    const permissions = await this.rolePermissionRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    const permissionIds = permissions.map((item) => item.permission_id);
+
+    const menus = await this.buildMenusFromPermissionIds(permissionIds);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.SIMULATE_ROLE_MENU,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: roleId,
+      newValues: {
+        simulatedRoleId: roleId,
+      },
+    });
+
+    return menus;
+  }
+
+  async getNavigationHistory(query: NavigationHistoryQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const qb = this.auditRepository
+      .createQueryBuilder('audit')
+      .where('audit.moduleName = :module', {
+        module: AUDIT_MODULES.NAVIGATION,
+      });
+
+    if (query.action) {
+      qb.andWhere('audit.action = :action', {
+        action: query.action,
+      });
+    }
+
+    qb.orderBy('audit.created_at', 'DESC');
+
+    qb.skip((page - 1) * limit);
+    qb.take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.VIEW_NAVIGATION_HISTORY,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: undefined,
+      newValues: {
+        filters: query,
+      },
+    });
+    return {
+      page,
+      limit,
+      total,
+      items,
+    };
+  }
+
+  async exportNavigation(format: 'json' | 'csv') {
+    const menus = await this.menuRepository.find({
+      order: {
+        displayOrder: 'ASC',
+      },
+    });
+
+    const items = await this.menuItemRepository.find();
+
+    const permissions = await this.menuPermissionRepository.find();
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.EXPORT_NAVIGATION,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: undefined,
+      newValues: {
+        format,
+        menus: menus.length,
+        menuItems: items.length,
+        menuPermissions: permissions.length,
+      },
+    });
+    if (format === 'json') {
+      return {
+        menus,
+        menuItems: items,
+        menuPermissions: permissions,
+      };
+    }
+
+    return {
+      format: 'csv',
+      rows: permissions.length,
+      data: permissions.map((p) => ({
+        menuItemId: p.menuItemId,
+        permissionId: p.permissionId,
+        applicationId: p.applicationId,
+        active: p.active,
+      })),
+    };
   }
 
   async hasAvailableMenus(userId: string): Promise<boolean> {
@@ -498,7 +692,6 @@ export class NavigationService {
     return updated;
   }
 
-  //////////To DO Método reorderMenuItem
   async reorderMenuItem(id: string, dto: ReorderMenuItemDto): Promise<MenuItemEntity> {
     const menuItem = await this.findMenuItemById(id);
 

@@ -35,6 +35,8 @@ import { UpdateMenuDto } from './dto/update-menu.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { CreateMenuPermissionDto } from './dto/create-menu-permission.dto';
+import { NavigationExportQueryDto } from './dto/navigation-export-query.dto';
+import { NavigationHistoryQueryDto } from './dto/navigation-history-query.dto';
 import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { UpdateMenuPermissionsDto } from './dto/update-menu-permissions.dto';
@@ -239,6 +241,88 @@ export class NavigationController {
   @UseGuards(JwtAuthGuard)
   async getMyMenu(@CurrentUser() user: AuthUser) {
     return this.navigationService.getMenusByUser(user.id);
+  }
+
+  @Get('user/:userId/menu')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Simulación administrativa por usuario',
+    description: 'Permite visualizar exactamente el menú calculado para cualquier usuario.',
+  })
+  @ApiParam({
+    name: 'userId',
+    description: 'UUID del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú calculado correctamente',
+  })
+  getUserMenu(
+    @Param('userId', ParseUUIDPipe)
+    userId: string
+  ) {
+    return this.navigationService.getMenuSimulationByUser(userId);
+  }
+
+  @Get('role/:roleId/menu')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Simulación administrativa por rol',
+  })
+  @ApiParam({
+    name: 'roleId',
+    description: 'UUID del rol',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Menú calculado para el rol',
+  })
+  getRoleMenu(
+    @Param('roleId', ParseUUIDPipe)
+    roleId: string
+  ) {
+    return this.navigationService.getMenuSimulationByRole(roleId);
+  }
+
+  @Get('history')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Historial de navegación',
+  })
+  @ApiQuery({
+    name: 'action',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+  })
+  getNavigationHistory(
+    @Query()
+    query: NavigationHistoryQueryDto
+  ) {
+    return this.navigationService.getNavigationHistory(query);
+  }
+
+  @Get('export')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Exportar configuración de navegación',
+  })
+  @ApiQuery({
+    name: 'format',
+    enum: ['json', 'csv'],
+    required: false,
+  })
+  exportNavigation(
+    @Query()
+    query: NavigationExportQueryDto
+  ) {
+    return this.navigationService.exportNavigation(query.format ?? 'json');
   }
 
   /////////////////////////////
