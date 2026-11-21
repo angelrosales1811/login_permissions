@@ -23,4 +23,5 @@ export const AUDIT_ENTITIES = {
 
   MENU: 'MENU',
   MENU_ITEM: 'MENU_ITEM',
+  MENU_PERMISSION: 'MENU_PERMISSION',
 } as const;

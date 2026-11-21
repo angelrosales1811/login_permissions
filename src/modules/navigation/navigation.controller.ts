@@ -6,10 +6,20 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 
 import { NavigationService } from './navigation.service';
 
@@ -22,9 +32,12 @@ import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
 
+import { UpdateStatusDto } from '../../common/dto/update-status.dto';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+import { CreateMenuPermissionDto } from './dto/create-menu-permission.dto';
 import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { UpdateMenuPermissionsDto } from './dto/update-menu-permissions.dto';
 
 @ApiTags('Navigation')
 @Controller('navigation')
@@ -63,13 +76,46 @@ export class NavigationController {
   @Permissions('IAM', 'NAVIGATION', '444')
   @ApiOperation({
     summary: 'Listar menús',
+    description: `
+    Por defecto retorna únicamente registros activos.
+
+    Filtros:
+
+    GET ?active=true
+
+    GET ?active=false
+
+    GET ?includeInactive=true
+
+    Utilizado para:
+
+    - Soft Delete
+    - Reactivación
+    - Auditoría
+    - Administración de Navegación
+
+    Permiso requerido:
+
+    IAM / NAVIGATION / 444
+  `,
   })
   @ApiResponse({
     status: 200,
-    description: 'Listado de menús',
+    description: 'Listado de menús obtenido correctamente',
   })
-  findMenus(@Query('active') active?: string) {
-    return this.navigationService.findMenus(active !== 'false');
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  findMenus(
+    @Query()
+    query: CatalogFilterDto
+  ) {
+    return this.navigationService.findMenus(query);
   }
 
   @Get('menus/:id')
@@ -103,30 +149,43 @@ export class NavigationController {
     return this.navigationService.updateMenu(id, dto);
   }
 
-  @Patch('menus/:id/deactivate')
+  @Patch('menus/:id/status')
   @Permissions('IAM', 'NAVIGATION', '777')
   @ApiOperation({
-    summary: 'Desactivar menú',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Menú desactivado',
-  })
-  deactivateMenu(@Param('id', ParseUUIDPipe) id: string) {
-    return this.navigationService.deactivateMenu(id);
-  }
+    summary: 'Actualizar estado de menú',
+    description: `
+    Realiza eliminación lógica mediante la columna active.
 
-  @Patch('menus/:id/reactivate')
-  @Permissions('IAM', 'NAVIGATION', '777')
-  @ApiOperation({
-    summary: 'Reactivar menú',
+    No elimina registros físicamente.
+
+    Permite:
+    - Desactivar menú
+    - Reactivar menú
+
+    Compatible con:
+    - Menu Items
+    - Menu Permissions
+    - My Menu
+
+    Permiso requerido:
+
+    IAM / NAVIGATION / 777
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del menú',
   })
   @ApiResponse({
     status: 200,
-    description: 'Menú reactivado',
+    description: 'Estado actualizado correctamente',
   })
-  reactivateMenu(@Param('id', ParseUUIDPipe) id: string) {
-    return this.navigationService.reactivateMenu(id);
+  @ApiResponse({
+    status: 404,
+    description: 'Menú no encontrado',
+  })
+  updateMenuStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateStatusDto) {
+    return this.navigationService.updateMenuStatus(id, dto.active);
   }
 
   @Get('my-menu')
@@ -200,6 +259,30 @@ export class NavigationController {
     return this.navigationService.createMenuItem(dto);
   }
 
+  @Post('menu-permissions')
+  @Permissions('IAM', 'NAVIGATION', '755')
+  @ApiOperation({
+    summary: 'Asignar permiso a Menu Item',
+  })
+  createMenuPermission(
+    @Body()
+    dto: CreateMenuPermissionDto
+  ) {
+    return this.navigationService.assignMenuPermission(dto);
+  }
+
+  @Get('menu-items/:id/permissions')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Obtener permisos asociados a Menu Item',
+  })
+  findMenuItemPermissions(
+    @Param('id', ParseUUIDPipe)
+    id: string
+  ) {
+    return this.navigationService.findMenuItemPermissions(id);
+  }
+
   @Get('menus/:id/items')
   @Permissions('IAM', 'NAVIGATION', '444')
   @ApiOperation({
@@ -261,34 +344,94 @@ export class NavigationController {
   reorderMenuItem(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReorderMenuItemDto) {
     return this.navigationService.reorderMenuItem(id, dto);
   }
-  ///////////////////To Do @Patch('menu-items/:id/deactivate',)
-  @Patch('menu-items/:id/deactivate')
+
+  @Patch('menu-items/:id/status')
   @Permissions('IAM', 'NAVIGATION', '777')
   @ApiOperation({
-    summary: 'Desactivar Menu Item',
+    summary: 'Actualizar estado de Menu Item',
+    description: `
+    Realiza eliminación lógica mediante la columna active.
+
+    Permite:
+
+    - Desactivar Menu Item
+    - Reactivar Menu Item
+
+    No elimina registros físicamente.
+
+    Permiso requerido:
+
+    IAM / NAVIGATION / 777
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del Menu Item',
   })
   @ApiResponse({
     status: 200,
-    description: 'Menu Item desactivado',
+    description: 'Estado actualizado correctamente',
   })
-  deactivateMenuItem(@Param('id', ParseUUIDPipe) id: string) {
-    return this.navigationService.deactivateMenuItem(id);
+  updateMenuItemStatus(
+    @Param('id', ParseUUIDPipe)
+    id: string,
+    @Body()
+    dto: UpdateStatusDto
+  ) {
+    return this.navigationService.updateMenuItemStatus(id, dto.active);
   }
-  ///////////////////To Do @Patch('menu-items/:id/reactivate',)
-  @Patch('menu-items/:id/reactivate')
+
+  @Put('menu-items/:id/permissions')
+  @Permissions('IAM', 'NAVIGATION', '644')
+  @ApiOperation({
+    summary: 'Reemplazar permisos de Menu Item',
+  })
+  replaceMenuPermissions(
+    @Param('id', ParseUUIDPipe)
+    id: string,
+    @Body()
+    dto: UpdateMenuPermissionsDto
+  ) {
+    return this.navigationService.replaceMenuPermissions(id, dto);
+  }
+
+  @Patch('menu-permissions/:id/status')
   @Permissions('IAM', 'NAVIGATION', '777')
   @ApiOperation({
-    summary: 'Reactivar Menu Item',
+    summary: 'Actualizar estado de Menu Permission',
+    description: `
+    Realiza eliminación lógica mediante la columna active.
+
+    Permite:
+
+    - Desactivar Menu Permission
+    - Reactivar Menu Permission
+
+    No elimina registros físicamente.
+
+    Permiso requerido:
+
+    IAM / NAVIGATION / 777
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del Menu Permission',
   })
   @ApiResponse({
     status: 200,
-    description: 'Menu Item reactivado',
+    description: 'Estado actualizado correctamente',
   })
   @ApiResponse({
-    status: 409,
-    description: 'Conflicto de displayOrder dentro del menú',
+    status: 404,
+    description: 'Menu Permission no encontrado',
   })
-  reactivateMenuItem(@Param('id', ParseUUIDPipe) id: string) {
-    return this.navigationService.reactivateMenuItem(id);
+  updateMenuPermissionStatus(
+    @Param('id', ParseUUIDPipe)
+    id: string,
+    @Body()
+    dto: UpdateStatusDto
+  ) {
+    return this.navigationService.updateMenuPermissionStatus(id, dto.active);
   }
 }

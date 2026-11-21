@@ -21,14 +21,18 @@ import { AUDIT_MODULES } from '../../common/constants/audit-modules.constant';
 
 import { DataSource, Repository } from 'typeorm';
 
+import { Module } from '../modules/entities/module.entity';
+import { Permission } from '../permissions/entities/permission.entity';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { MenuPermissionEntity } from './entities/menu-permission.entity';
 
-import { Module } from '../modules/entities/module.entity';
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+import { CreateMenuPermissionDto } from './dto/create-menu-permission.dto';
 import { MenuItemResponseDto, MenuResponseDto } from './dto/menu-response.dto';
 import { ReorderMenuItemDto } from './dto/reorder-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
+import { UpdateMenuPermissionsDto } from './dto/update-menu-permissions.dto';
 
 type PermissionRow = {
   permission_id: string;
@@ -54,6 +58,9 @@ export class NavigationService {
 
     @InjectRepository(Module)
     private readonly moduleRepository: Repository<Module>,
+
+    @InjectRepository(Permission)
+    private readonly permissionRepository: Repository<Permission>,
 
     private readonly auditContextService: AuditContextService,
     private readonly auditEntityService: AuditEntityService,
@@ -143,8 +150,6 @@ export class NavigationService {
     return menus.length > 0;
   }
 
-  ////////////////////////////////////////////////
-
   async createMenu(dto: CreateMenuDto): Promise<Menu> {
     const exists = await this.menuRepository.findOne({
       where: {
@@ -199,11 +204,22 @@ export class NavigationService {
     return saved;
   }
 
-  async findMenus(active = true): Promise<Menu[]> {
+  async findMenus(query?: CatalogFilterDto): Promise<Menu[]> {
+    let where = {};
+
+    if (!query?.includeInactive) {
+      where =
+        query?.active !== undefined
+          ? {
+              active: query.active,
+            }
+          : {
+              active: true,
+            };
+    }
+
     return this.menuRepository.find({
-      where: {
-        active,
-      },
+      where,
       order: {
         displayOrder: 'ASC',
       },
@@ -301,66 +317,42 @@ export class NavigationService {
     return updated;
   }
 
-  async deactivateMenu(id: string): Promise<Menu> {
+  async updateMenuStatus(id: string, active: boolean): Promise<Menu> {
     const menu = await this.findMenuById(id);
 
+    const previousActive = menu.active;
+
     const oldValues = {
-      active: menu.active,
+      ...menu,
     };
 
-    menu.active = false;
+    menu.active = active;
 
     const context = this.auditContextService.getContext();
-    if (!context.userId) {
-      throw new UnauthorizedException('Audit context not initialized');
-    }
 
     this.auditEntityService.applyUpdateAudit(menu, context);
 
     const updated = await this.menuRepository.save(menu);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE_MENU
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE_MENU
+          : active
+            ? AUDIT_ACTIONS.REACTIVATE_MENU
+            : AUDIT_ACTIONS.DEACTIVATE_MENU;
+
     await this.auditLogService.record({
-      action: AUDIT_ACTIONS.DEACTIVATE_MENU,
+      action,
       moduleName: AUDIT_MODULES.NAVIGATION,
       entityName: AUDIT_ENTITIES.MENU,
       recordId: updated.id,
       applicationId: updated.applicationId,
       oldValues,
       newValues: {
-        active: false,
-      },
-    });
-
-    return updated;
-  }
-
-  async reactivateMenu(id: string): Promise<Menu> {
-    const menu = await this.findMenuById(id);
-
-    const oldValues = {
-      active: menu.active,
-    };
-
-    menu.active = true;
-
-    const context = this.auditContextService.getContext();
-    if (!context.userId) {
-      throw new UnauthorizedException('Audit context not initialized');
-    }
-
-    this.auditEntityService.applyUpdateAudit(menu, context);
-
-    const updated = await this.menuRepository.save(menu);
-
-    await this.auditLogService.record({
-      action: AUDIT_ACTIONS.REACTIVATE_MENU,
-      moduleName: AUDIT_MODULES.NAVIGATION,
-      entityName: AUDIT_ENTITIES.MENU,
-      recordId: updated.id,
-      applicationId: updated.applicationId,
-      oldValues,
-      newValues: {
-        active: true,
+        id: updated.id,
+        active: updated.active,
       },
     });
 
@@ -554,86 +546,212 @@ export class NavigationService {
 
     return updated;
   }
-  //////////To DO Método deactivateMenuItem
-  async deactivateMenuItem(id: string): Promise<MenuItemEntity> {
+
+  async updateMenuItemStatus(id: string, active: boolean): Promise<MenuItemEntity> {
     const menuItem = await this.findMenuItemById(id);
 
+    const previousActive = menuItem.active;
+
     const oldValues = {
-      active: menuItem.active,
+      ...menuItem,
     };
 
-    menuItem.active = false;
+    if (active) {
+      const duplicateOrder = await this.menuItemRepository.findOne({
+        where: {
+          menuId: menuItem.menuId,
+          displayOrder: menuItem.displayOrder,
+          active: true,
+        },
+      });
+
+      if (duplicateOrder && duplicateOrder.id !== menuItem.id) {
+        throw new ConflictException(
+          `Ya existe un Menu Item activo con displayOrder ${menuItem.displayOrder}`
+        );
+      }
+    }
+
+    menuItem.active = active;
 
     const context = this.auditContextService.getContext();
-
-    if (!context.userId) {
-      throw new UnauthorizedException('Audit context not initialized');
-    }
 
     this.auditEntityService.applyUpdateAudit(menuItem, context);
 
     const updated = await this.menuItemRepository.save(menuItem);
 
+    const action =
+      !previousActive && active
+        ? AUDIT_ACTIONS.REACTIVATE_MENU_ITEM
+        : previousActive && !active
+          ? AUDIT_ACTIONS.DEACTIVATE_MENU_ITEM
+          : active
+            ? AUDIT_ACTIONS.REACTIVATE_MENU_ITEM
+            : AUDIT_ACTIONS.DEACTIVATE_MENU_ITEM;
+
     await this.auditLogService.record({
-      action: AUDIT_ACTIONS.DEACTIVATE_MENU_ITEM,
+      action,
       moduleName: AUDIT_MODULES.NAVIGATION,
       entityName: AUDIT_ENTITIES.MENU_ITEM,
       recordId: updated.id,
       applicationId: updated.applicationId,
       oldValues,
       newValues: {
-        active: false,
+        id: updated.id,
+        active: updated.active,
       },
     });
 
     return updated;
   }
-  //////////To DO Método reactivateMenuItem
-  async reactivateMenuItem(id: string): Promise<MenuItemEntity> {
-    const menuItem = await this.findMenuItemById(id);
 
-    const oldValues = {
-      active: menuItem.active,
-    };
+  async assignMenuPermission(dto: CreateMenuPermissionDto): Promise<MenuPermissionEntity> {
+    await this.findMenuItemById(dto.menu_item_id);
 
-    const duplicateOrder = await this.menuItemRepository.findOne({
+    const permission = await this.permissionRepository.findOne({
       where: {
-        menuId: menuItem.menuId,
-        displayOrder: menuItem.displayOrder,
+        id: dto.permission_id,
         active: true,
       },
     });
 
-    if (duplicateOrder && duplicateOrder.id !== menuItem.id) {
-      throw new ConflictException(
-        `Ya existe un Menu Item activo con displayOrder ${menuItem.displayOrder}`
-      );
+    if (!permission) {
+      throw new NotFoundException('Permiso no encontrado');
     }
 
-    menuItem.active = true;
+    const existing = await this.menuPermissionRepository.findOne({
+      where: {
+        menuItemId: dto.menu_item_id,
+        permissionId: dto.permission_id,
+      },
+    });
+
+    if (existing?.active) {
+      throw new ConflictException('La relación ya existe');
+    }
+
+    if (existing && !existing.active) {
+      existing.active = true;
+
+      const context = this.auditContextService.getContext();
+
+      this.auditEntityService.applyUpdateAudit(existing, context);
+
+      return this.menuPermissionRepository.save(existing);
+    }
+
+    const entity = this.menuPermissionRepository.create({
+      menuItemId: dto.menu_item_id,
+      permissionId: dto.permission_id,
+      applicationId: dto.application_id,
+      active: true,
+    });
 
     const context = this.auditContextService.getContext();
 
-    if (!context.userId) {
-      throw new UnauthorizedException('Audit context not initialized');
-    }
+    this.auditEntityService.applyCreationAudit(entity, context);
 
-    this.auditEntityService.applyUpdateAudit(menuItem, context);
-
-    const updated = await this.menuItemRepository.save(menuItem);
+    const saved = await this.menuPermissionRepository.save(entity);
 
     await this.auditLogService.record({
-      action: AUDIT_ACTIONS.REACTIVATE_MENU_ITEM,
+      action: AUDIT_ACTIONS.ASSIGN_MENU_PERMISSION,
       moduleName: AUDIT_MODULES.NAVIGATION,
-      entityName: AUDIT_ENTITIES.MENU_ITEM,
+      entityName: AUDIT_ENTITIES.MENU_PERMISSION,
+      recordId: saved.id,
+      applicationId: saved.applicationId,
+      newValues: {
+        ...saved,
+      },
+    });
+
+    return saved;
+  }
+
+  async replaceMenuPermissions(
+    menuItemId: string,
+    dto: UpdateMenuPermissionsDto
+  ): Promise<MenuPermissionEntity[]> {
+    await this.findMenuItemById(menuItemId);
+
+    const current = await this.menuPermissionRepository.find({
+      where: {
+        menuItemId,
+      },
+    });
+
+    for (const item of current) {
+      item.active = false;
+
+      const context = this.auditContextService.getContext();
+
+      this.auditEntityService.applyUpdateAudit(item, context);
+
+      await this.menuPermissionRepository.save(item);
+    }
+
+    const result: MenuPermissionEntity[] = [];
+
+    for (const permissionId of dto.permission_ids) {
+      const relation = await this.assignMenuPermission({
+        menu_item_id: menuItemId,
+        permission_id: permissionId,
+        application_id:
+          current[0]?.applicationId ?? (await this.findMenuItemById(menuItemId)).applicationId,
+      });
+
+      result.push(relation);
+    }
+
+    return result;
+  }
+
+  async updateMenuPermissionStatus(id: string, active: boolean): Promise<MenuPermissionEntity> {
+    const menuPermission = await this.menuPermissionRepository.findOne({
+      where: { id },
+    });
+
+    if (!menuPermission) {
+      throw new NotFoundException('Menu Permission no encontrado');
+    }
+
+    const oldValues = {
+      ...menuPermission,
+    };
+
+    menuPermission.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(menuPermission, context);
+
+    const updated = await this.menuPermissionRepository.save(menuPermission);
+
+    const action = active
+      ? AUDIT_ACTIONS.ASSIGN_MENU_PERMISSION
+      : AUDIT_ACTIONS.REMOVE_MENU_PERMISSION;
+
+    await this.auditLogService.record({
+      action,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU_PERMISSION,
       recordId: updated.id,
       applicationId: updated.applicationId,
       oldValues,
       newValues: {
-        active: true,
+        id: updated.id,
+        active: updated.active,
       },
     });
 
     return updated;
+  }
+
+  async findMenuItemPermissions(menuItemId: string): Promise<MenuPermissionEntity[]> {
+    return this.menuPermissionRepository.find({
+      where: {
+        menuItemId,
+        active: true,
+      },
+    });
   }
 }
