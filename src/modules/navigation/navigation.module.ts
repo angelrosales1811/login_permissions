@@ -14,6 +14,7 @@ import { NavigationController } from './navigation.controller';
 import { NavigationService } from './navigation.service';
 
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { RoleModule } from '../modules/entities/role-module.entity';
 import { RolePermission } from '../roles/entities/role-permission.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 
@@ -31,6 +32,7 @@ import { UserRole } from '../roles/entities/user-role.entity';
       UserRole,
       RolePermission,
       AuditLog,
+      RoleModule,
     ]),
   ],
   controllers: [NavigationController],

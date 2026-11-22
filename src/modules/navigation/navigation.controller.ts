@@ -193,25 +193,38 @@ export class NavigationController {
   @Get('my-menu')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Obtener menú dinámico del usuario',
+    summary: 'Obtener menú dinámico basado en módulos efectivos y permisos',
     description: `
-      Genera el menú visible para el usuario autenticado.
+      Genera la navegación efectiva del usuario.
 
-      Flujo:
+      Arquitectura:
 
-      JWT
-      ↓
-      Roles
-      ↓
-      Permission Cache
+      User Roles
       ↓
       Role Modules
       ↓
-      Navigation
+      Modules
       ↓
-      Menú final
+      Menu Items
+      ↓
+      Menu Permissions
+      ↓
+      Permission Cache
+      ↓
+      Menu Final
 
-      Sólo devuelve opciones autorizadas para el usuario.
+      Un elemento de menú únicamente será visible cuando:
+
+      1. El módulo esté asignado al rol.
+      2. El permiso exista en permission_cache.
+      3. Menu Item y Menu Permission estén activos.
+
+      Compatible con:
+
+      - Navegación multi aplicación
+      - GET /permissions/effective
+      - POST /token/introspect
+      - RBAC centralizado
       `,
   })
   @ApiResponse({
@@ -267,7 +280,7 @@ export class NavigationController {
   @Get('role/:roleId/menu')
   @Permissions('IAM', 'NAVIGATION', '444')
   @ApiOperation({
-    summary: 'Simulación administrativa por rol',
+    summary: 'Simulación completa de navegación basada en role_modules y permisos efectivos',
   })
   @ApiParam({
     name: 'roleId',
@@ -282,6 +295,72 @@ export class NavigationController {
     roleId: string
   ) {
     return this.navigationService.getMenuSimulationByRole(roleId);
+  }
+
+  @Get('role/:roleId/modules')
+  @Permissions('IAM', 'NAVIGATION', '444')
+  @ApiOperation({
+    summary: 'Consultar módulos efectivos del rol',
+    description: `
+  Endpoint de diagnóstico para validar la configuración RBAC.
+
+  Flujo:
+
+  Role
+  ↓
+  Role Modules
+  ↓
+  Modules
+
+  Permite verificar qué módulos serán utilizados durante
+  la construcción de navegación dinámica.
+
+  Compatible con:
+
+  - GET /navigation/role/:roleId/menu
+  - GET /navigation/my-menu
+  - GET /permissions/effective (Fase 6)
+  - POST /token/introspect (Fase 7)
+
+  Utilizado principalmente para soporte, auditoría
+  y validación de asignaciones Role → Module.
+  `,
+  })
+  @ApiParam({
+    name: 'roleId',
+    description: 'UUID del rol',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de módulos efectivos del rol',
+    schema: {
+      example: {
+        roleId: '676ba779-7c0e-406e-bfbf-ddacee9a769c',
+        totalModules: 2,
+        modules: [
+          {
+            id: 'a1111111-1111-1111-1111-111111111111',
+            internalName: 'USERS',
+            externalName: 'Usuarios',
+          },
+          {
+            id: 'b2222222-2222-2222-2222-222222222222',
+            internalName: 'ROLES',
+            externalName: 'Roles',
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Rol no encontrado',
+  })
+  getRoleModules(
+    @Param('roleId', ParseUUIDPipe)
+    roleId: string
+  ) {
+    return this.navigationService.getRoleModules(roleId);
   }
 
   @Get('history')

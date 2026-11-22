@@ -1,11 +1,22 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Permissions } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
 
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserRolesDto } from './dto/update-user-roles.dto';
+
+import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
+import { AssignUserRoleDto } from './dto/assign-user-role.dto';
+import { UpdateUserRoleStatusDto } from './dto/update-user-role-status.dto';
 
 import { UsersService } from './users.service';
 
@@ -104,6 +115,17 @@ export class UsersController {
     Permission Cache
     ↓
     JWT
+
+    Filtros soportados:
+
+    GET ?active=true
+    Retorna asignaciones activas.
+
+    GET ?active=false
+    Retorna asignaciones inactivas.
+
+    GET ?includeInactive=true
+    Retorna activas e inactivas.
     `,
   })
   @ApiParam({
@@ -139,8 +161,100 @@ export class UsersController {
     description: 'Permisos insuficientes',
   })
   @Permissions('IAM', 'USERS', '444')
-  getUserRoles(@Param('id') id: string) {
-    return this.usersService.getUserRoles(id);
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  getUserRoles(@Param('id') id: string, @Query() query: CatalogFilterDto) {
+    return this.usersService.getUserRoles(id, query);
+  }
+
+  @Post(':id/roles')
+  @ApiOperation({
+    summary: 'Asignar rol al usuario',
+    description: `
+    Agrega una asignación individual de rol al usuario.
+
+    Comportamiento:
+
+    Usuario
+    ↓
+    User Roles
+    ↓
+    Permission Cache Auto-Rebuild
+    ↓
+    JWT actualizado en siguiente autenticación
+
+    Si la relación existe inactiva será reactivada.
+
+    Permiso requerido:
+
+    IAM / USERS / 644
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del usuario',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Rol asignado correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Usuario o rol no encontrado',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'El rol ya se encuentra asignado',
+  })
+  @Permissions('IAM', 'USERS', '644')
+  assignRole(@Param('id') id: string, @Body() dto: AssignUserRoleDto) {
+    return this.usersService.assignRole(id, dto);
+  }
+
+  @Patch(':id/roles/:roleId/status')
+  @ApiOperation({
+    summary: 'Actualizar estado de asignación usuario-rol',
+    description: `
+  Realiza eliminación lógica o reactivación de la relación.
+
+  Usuario
+  ↓
+  User Roles
+  ↓
+  Permission Cache Auto-Rebuild
+  ↓
+  JWT actualizado
+
+  Permiso requerido:
+
+  IAM / USERS / 777
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del usuario',
+  })
+  @ApiParam({
+    name: 'roleId',
+    description: 'UUID del rol',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado actualizado correctamente',
+  })
+  @Permissions('IAM', 'USERS', '777')
+  updateUserRoleStatus(
+    @Param('id') id: string,
+    @Param('roleId') roleId: string,
+    @Body() dto: UpdateUserRoleStatusDto
+  ) {
+    return this.usersService.updateUserRoleStatus(id, roleId, dto.active);
   }
 
   @Put(':id/roles')

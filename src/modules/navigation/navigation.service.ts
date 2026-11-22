@@ -22,6 +22,7 @@ import { AUDIT_MODULES } from '../../common/constants/audit-modules.constant';
 import { DataSource, Repository } from 'typeorm';
 
 import { Module } from '../modules/entities/module.entity';
+import { RoleModule } from '../modules/entities/role-module.entity';
 import { Permission } from '../permissions/entities/permission.entity';
 import { MenuItemEntity } from './entities/menu-item.entity';
 import { MenuPermissionEntity } from './entities/menu-permission.entity';
@@ -39,10 +40,12 @@ import { RolePermission } from '../roles/entities/role-permission.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 
 import { NavigationHistoryQueryDto } from './dto/navigation-history-query.dto';
-//import { NavigationExportQueryDto } from './dto/navigation-export-query.dto';
 
 type PermissionRow = {
   permission_id: string;
+};
+type ModuleRow = {
+  module_id: string;
 };
 
 @Injectable()
@@ -69,6 +72,9 @@ export class NavigationService {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
 
+    @InjectRepository(RoleModule)
+    private readonly roleModuleRepository: Repository<RoleModule>,
+
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepository: Repository<RolePermission>,
 
@@ -80,11 +86,16 @@ export class NavigationService {
     private readonly auditLogService: AuditLogService
   ) {}
 
-  private async buildMenusFromPermissionIds(permissionIds: string[]): Promise<MenuResponseDto[]> {
+  private async buildMenusFromPermissionIds(
+    permissionIds: string[],
+    moduleIds: string[]
+  ): Promise<MenuResponseDto[]> {
     if (!permissionIds.length) {
       return [];
     }
-
+    if (!moduleIds.length) {
+      return [];
+    }
     const menuPermissions = await this.menuPermissionRepository
       .createQueryBuilder('mp')
       .where('mp.active = true')
@@ -104,6 +115,9 @@ export class NavigationService {
       .where('mi.active = true')
       .andWhere('mi.id IN (:...menuItemIds)', {
         menuItemIds,
+      })
+      .andWhere('mi.moduleId IN (:...moduleIds)', {
+        moduleIds,
       })
       .orderBy('mi.displayOrder', 'ASC')
       .getMany();
@@ -137,7 +151,47 @@ export class NavigationService {
         })),
     }));
   }
-  /////////////////////////////////
+
+  private async getUserAccessibleModuleIds(userId: string): Promise<string[]> {
+    const roles = await this.userRoleRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    if (!roles.length) {
+      return [];
+    }
+
+    const roleIds = roles.map((role) => role.role_id);
+
+    const modules = await this.roleModuleRepository.find({
+      where: {
+        active: true,
+      },
+    });
+
+    return [
+      ...new Set(
+        modules
+          .filter((module) => roleIds.includes(module.role_id))
+          .map((module) => module.module_id)
+      ),
+    ];
+  }
+
+  private async getRoleAccessibleModuleIds(roleId: string): Promise<string[]> {
+    const modules = await this.roleModuleRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    return [...new Set(modules.map((m) => m.module_id))];
+  }
+
   async getMenusByUser(userId: string): Promise<MenuResponseDto[]> {
     const permissions: PermissionRow[] = await this.dataSource.query(
       `
@@ -153,6 +207,23 @@ export class NavigationService {
     }
 
     const permissionIds = permissions.map((item) => item.permission_id);
+    const moduleIds = await this.getUserAccessibleModuleIds(userId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.NAVIGATION_MODULE_FILTER,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: userId,
+      newValues: {
+        moduleCount: moduleIds.length,
+        modules: moduleIds,
+        permissionCount: permissionIds.length,
+      },
+    });
+
+    if (!moduleIds.length) {
+      return [];
+    }
 
     const menuPermissions = await this.menuPermissionRepository
       .createQueryBuilder('mp')
@@ -212,9 +283,9 @@ export class NavigationService {
       });
     }
 
-    return this.buildMenusFromPermissionIds(permissionIds);
+    return this.buildMenusFromPermissionIds(permissionIds, moduleIds);
   }
-  ////////////////////////////////
+
   async getMenuSimulationByUser(userId: string): Promise<MenuResponseDto[]> {
     const menus = await this.getMenusByUser(userId);
 
@@ -239,9 +310,11 @@ export class NavigationService {
       },
     });
 
+    const moduleIds = await this.getRoleAccessibleModuleIds(roleId);
+
     const permissionIds = permissions.map((item) => item.permission_id);
 
-    const menus = await this.buildMenusFromPermissionIds(permissionIds);
+    const menus = await this.buildMenusFromPermissionIds(permissionIds, moduleIds);
 
     await this.auditLogService.record({
       action: AUDIT_ACTIONS.SIMULATE_ROLE_MENU,
@@ -254,6 +327,57 @@ export class NavigationService {
     });
 
     return menus;
+  }
+
+  async getRoleModules(roleId: string) {
+    const roleModules = await this.roleModuleRepository.find({
+      where: {
+        role_id: roleId,
+        active: true,
+      },
+    });
+
+    if (!roleModules.length) {
+      return {
+        roleId,
+        totalModules: 0,
+        modules: [],
+      };
+    }
+
+    const moduleIds = roleModules.map((module) => module.module_id);
+
+    const modules = await this.moduleRepository
+      .createQueryBuilder('m')
+      .where('m.active = true')
+      .andWhere('m.id IN (:...moduleIds)', {
+        moduleIds,
+      })
+      .orderBy('m.display_order', 'ASC')
+      .getMany();
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.NAVIGATION_MODULE_FILTER,
+      moduleName: AUDIT_MODULES.NAVIGATION,
+      entityName: AUDIT_ENTITIES.MENU,
+      recordId: roleId,
+      newValues: {
+        roleId,
+        moduleCount: modules.length,
+        moduleIds,
+      },
+    });
+
+    return {
+      roleId,
+      totalModules: modules.length,
+      modules: modules.map((module) => ({
+        id: module.id,
+        internalName: module.internal_name,
+        externalName: module.external_name,
+        applicationId: module.application_id,
+      })),
+    };
   }
 
   async getNavigationHistory(query: NavigationHistoryQueryDto) {
