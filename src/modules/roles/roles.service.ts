@@ -31,6 +31,8 @@ import { AuditLogService } from '../../common/services/audit-log.service';
 import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
 
 import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+import { AssignRoleModuleDto } from './dto/assign-role-module.dto';
+import { AssignRolePermissionDto } from './dto/assign-role-permission.dto';
 
 @Injectable()
 export class RolesService {
@@ -280,16 +282,177 @@ export class RolesService {
     return updated;
   }
 
-  async getRolePermissions(roleId: string): Promise<RolePermission[]> {
+  async getRolePermissions(roleId: string, query?: CatalogFilterDto): Promise<RolePermission[]> {
     await this.findOne(roleId);
 
+    const where: {
+      role_id: string;
+      active?: boolean;
+    } = {
+      role_id: roleId,
+    };
+
+    if (!query?.includeInactive) {
+      where.active = query?.active !== undefined ? query.active : true;
+    }
+
     return this.rolePermissionRepository.find({
+      where,
+    });
+  }
+
+  async assignRolePermission(
+    roleId: string,
+    dto: AssignRolePermissionDto
+  ): Promise<RolePermission> {
+    await this.findOne(roleId);
+
+    const resource = await this.resourceRepository.findOne({
       where: {
-        role_id: roleId,
+        id: dto.resourceId,
         active: true,
       },
     });
+
+    if (!resource) {
+      throw new NotFoundException(`Resource ${dto.resourceId} not found`);
+    }
+
+    const permission = await this.permissionRepository.findOne({
+      where: {
+        id: dto.permissionId,
+        active: true,
+      },
+    });
+
+    if (!permission) {
+      throw new NotFoundException(`Permission ${dto.permissionId} not found`);
+    }
+
+    const existing = await this.rolePermissionRepository.findOne({
+      where: {
+        role_id: roleId,
+        resource_id: dto.resourceId,
+      },
+    });
+
+    const context = this.auditContextService.getContext();
+
+    if (existing) {
+      if (existing.active) {
+        return existing;
+      }
+
+      existing.permission_id = dto.permissionId;
+      existing.application_id = dto.applicationId;
+      existing.active = true;
+
+      this.auditEntityService.applyUpdateAudit(existing, context);
+
+      const saved = await this.rolePermissionRepository.save(existing);
+
+      await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+      await this.auditLogService.record({
+        action: AUDIT_ACTIONS.PERMISSION_REACTIVATED,
+        moduleName: 'IAM',
+        entityName: AUDIT_ENTITIES.ROLE_PERMISSION,
+        recordId: roleId,
+        oldValues: {
+          resourceId: dto.resourceId,
+          active: false,
+        },
+        newValues: {
+          resourceId: dto.resourceId,
+          active: true,
+        },
+      });
+
+      return saved;
+    }
+
+    const relation = this.rolePermissionRepository.create({
+      role_id: roleId,
+      resource_id: dto.resourceId,
+      permission_id: dto.permissionId,
+      application_id: dto.applicationId,
+      active: true,
+    });
+
+    this.auditEntityService.applyCreationAudit(relation, context);
+
+    const saved = await this.rolePermissionRepository.save(relation);
+
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.PERMISSION_ASSIGN,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.ROLE_PERMISSION,
+      recordId: roleId,
+      oldValues: {},
+      newValues: {
+        resourceId: dto.resourceId,
+        permissionId: dto.permissionId,
+        active: true,
+      },
+    });
+
+    return saved;
   }
+
+  async updateRolePermissionStatus(
+    roleId: string,
+    resourceId: string,
+    active: boolean
+  ): Promise<RolePermission> {
+    const relation = await this.rolePermissionRepository.findOne({
+      where: {
+        role_id: roleId,
+        resource_id: resourceId,
+      },
+    });
+
+    if (!relation) {
+      throw new NotFoundException('RolePermission relation not found');
+    }
+
+    const previousStatus = relation.active;
+
+    relation.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(relation, context);
+
+    const updated = await this.rolePermissionRepository.save(relation);
+
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.PERMISSION_REACTIVATED : AUDIT_ACTIONS.PERMISSION_DEACTIVATED,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE_PERMISSION,
+
+      recordId: roleId,
+
+      oldValues: {
+        resourceId,
+        active: previousStatus,
+      },
+
+      newValues: {
+        resourceId,
+        active,
+      },
+    });
+
+    return updated;
+  }
+
+  /////////////////////////////////////////
 
   async updateRolePermissions(roleId: string, dto: UpdateRolePermissionsDto): Promise<void> {
     await this.findOne(roleId);
@@ -410,15 +573,156 @@ export class RolesService {
     });
   }
 
-  async getRoleModules(roleId: string): Promise<RoleModule[]> {
+  async getRoleModules(roleId: string, query?: CatalogFilterDto): Promise<RoleModule[]> {
     await this.findOne(roleId);
 
+    const where: {
+      role_id: string;
+      active?: boolean;
+    } = {
+      role_id: roleId,
+    };
+
+    if (!query?.includeInactive) {
+      where.active = query?.active !== undefined ? query.active : true;
+    }
+
     return this.roleModuleRepository.find({
+      where,
+    });
+  }
+
+  async assignRoleModule(roleId: string, dto: AssignRoleModuleDto): Promise<RoleModule> {
+    await this.findOne(roleId);
+
+    const module = await this.moduleRepository.findOne({
       where: {
-        role_id: roleId,
+        id: dto.moduleId,
         active: true,
       },
     });
+
+    if (!module) {
+      throw new NotFoundException(`Module ${dto.moduleId} not found`);
+    }
+
+    const existing = await this.roleModuleRepository.findOne({
+      where: {
+        role_id: roleId,
+        module_id: dto.moduleId,
+      },
+    });
+
+    const context = this.auditContextService.getContext();
+
+    if (existing) {
+      if (existing.active) {
+        return existing;
+      }
+
+      existing.active = true;
+
+      this.auditEntityService.applyUpdateAudit(existing, context);
+
+      const saved = await this.roleModuleRepository.save(existing);
+
+      await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+      await this.auditLogService.record({
+        action: AUDIT_ACTIONS.MODULE_REACTIVATED,
+        moduleName: 'IAM',
+        entityName: AUDIT_ENTITIES.ROLE_MODULE,
+        recordId: roleId,
+        oldValues: {
+          moduleId: dto.moduleId,
+          active: false,
+        },
+        newValues: {
+          moduleId: dto.moduleId,
+          active: true,
+        },
+      });
+
+      return saved;
+    }
+
+    const relation = this.roleModuleRepository.create({
+      role_id: roleId,
+      module_id: dto.moduleId,
+      application_id: module.application_id,
+      active: true,
+    });
+
+    this.auditEntityService.applyCreationAudit(relation, context);
+
+    const saved = await this.roleModuleRepository.save(relation);
+
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.MODULE_ASSIGN,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.ROLE_MODULE,
+      recordId: roleId,
+      oldValues: {},
+      newValues: {
+        moduleId: dto.moduleId,
+        active: true,
+      },
+    });
+
+    return saved;
+  }
+
+  async updateRoleModuleStatus(
+    roleId: string,
+    moduleId: string,
+    active: boolean
+  ): Promise<RoleModule> {
+    const relation = await this.roleModuleRepository.findOne({
+      where: {
+        role_id: roleId,
+        module_id: moduleId,
+      },
+    });
+
+    if (!relation) {
+      throw new NotFoundException('RoleModule relation not found');
+    }
+
+    const previousStatus = relation.active;
+
+    relation.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(relation, context);
+
+    const updated = await this.roleModuleRepository.save(relation);
+
+    await this.permissionCacheService.rebuildUsersByRole(roleId);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.MODULE_REACTIVATED : AUDIT_ACTIONS.MODULE_DEACTIVATED,
+
+      moduleName: 'IAM',
+
+      entityName: AUDIT_ENTITIES.ROLE_MODULE,
+
+      recordId: roleId,
+
+      oldValues: {
+        moduleId,
+        active: previousStatus,
+      },
+
+      newValues: {
+        moduleId,
+        active,
+      },
+    });
+
+    return updated;
   }
 
   async updateRoleModules(roleId: string, dto: UpdateRoleModulesDto): Promise<void> {

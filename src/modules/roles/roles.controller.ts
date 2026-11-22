@@ -20,6 +20,10 @@ import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
 import { UpdateRoleStatusDto } from './dto/update-role-status.dto';
 
 import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
+import { AssignRoleModuleDto } from './dto/assign-role-module.dto';
+import { AssignRolePermissionDto } from './dto/assign-role-permission.dto';
+import { UpdateRoleModuleStatusDto } from './dto/update-role-module-status.dto';
+import { UpdateRolePermissionStatusDto } from './dto/update-role-permission-status.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RolesService } from './roles.service';
 
@@ -232,7 +236,19 @@ export class RolesController {
       Tabla relacionada:
 
       public.role_permissions
-      `,
+
+      Filtros soportados:
+
+      GET ?active=true
+      Retorna relaciones activas.
+
+      GET ?active=false
+      Retorna relaciones inactivas.
+
+      GET ?includeInactive=true
+      Retorna activas e inactivas.
+
+            `,
   })
   @ApiParam({
     name: 'id',
@@ -243,8 +259,79 @@ export class RolesController {
     description: 'Permisos obtenidos correctamente',
   })
   @Permissions('IAM', 'ROLES', '444')
-  getRolePermissions(@Param('id') id: string) {
-    return this.rolesService.getRolePermissions(id);
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  getRolePermissions(@Param('id') id: string, @Query() query: CatalogFilterDto) {
+    return this.rolesService.getRolePermissions(id, query);
+  }
+
+  @Post(':id/permissions')
+  @ApiOperation({
+    summary: 'Asignar permiso al rol',
+    description: `
+  Agrega una relación individual Role Permission.
+
+  Role
+  ↓
+  Role Permissions
+  ↓
+  Permission Cache Auto-Rebuild
+  ↓
+  Usuarios afectados actualizados
+
+  Si la relación existe y está inactiva será reactivada.
+
+  Permiso requerido:
+
+  IAM / ROLES / 644
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del rol',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Permiso asignado correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Rol, recurso o permiso no encontrado',
+  })
+  @Permissions('IAM', 'ROLES', '644')
+  assignRolePermission(@Param('id') id: string, @Body() dto: AssignRolePermissionDto) {
+    return this.rolesService.assignRolePermission(id, dto);
+  }
+
+  @Patch(':id/permissions/:resourceId/status')
+  @ApiOperation({
+    summary: 'Actualizar estado de asignación rol-permiso',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del rol',
+  })
+  @ApiParam({
+    name: 'resourceId',
+    description: 'UUID del recurso',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado actualizado correctamente',
+  })
+  @Permissions('IAM', 'ROLES', '777')
+  updateRolePermissionStatus(
+    @Param('id') id: string,
+    @Param('resourceId') resourceId: string,
+    @Body() dto: UpdateRolePermissionStatusDto
+  ) {
+    return this.rolesService.updateRolePermissionStatus(id, resourceId, dto.active);
   }
 
   @Put(':id/permissions')
@@ -296,6 +383,17 @@ export class RolesController {
       Tabla relacionada:
 
       public.role_modules
+
+      Filtros soportados:
+
+      GET ?active=true
+      Retorna relaciones activas.
+
+      GET ?active=false
+      Retorna relaciones inactivas.
+
+      GET ?includeInactive=true
+      Retorna activas e inactivas.
       `,
   })
   @ApiParam({
@@ -307,8 +405,79 @@ export class RolesController {
     description: 'Módulos obtenidos correctamente',
   })
   @Permissions('IAM', 'ROLES', '444')
-  getRoleModules(@Param('id') id: string) {
-    return this.rolesService.getRoleModules(id);
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  getRoleModules(@Param('id') id: string, @Query() query: CatalogFilterDto) {
+    return this.rolesService.getRoleModules(id, query);
+  }
+
+  @Post(':id/modules')
+  @ApiOperation({
+    summary: 'Asignar módulo al rol',
+    description: `
+      Agrega una asignación individual entre rol y módulo.
+
+      Role
+      ↓
+      Role Modules
+      ↓
+      Permission Cache Auto-Rebuild
+      ↓
+      Usuarios afectados actualizados
+
+      Si la relación existe inactiva será reactivada.
+
+      Permiso requerido:
+
+      IAM / ROLES / 644
+      `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del rol',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Módulo asignado correctamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Rol o módulo no encontrado',
+  })
+  @Permissions('IAM', 'ROLES', '644')
+  assignRoleModule(@Param('id') id: string, @Body() dto: AssignRoleModuleDto) {
+    return this.rolesService.assignRoleModule(id, dto);
+  }
+
+  @Patch(':id/modules/:moduleId/status')
+  @ApiOperation({
+    summary: 'Actualizar estado de asignación rol-módulo',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del rol',
+  })
+  @ApiParam({
+    name: 'moduleId',
+    description: 'UUID del módulo',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado actualizado correctamente',
+  })
+  @Permissions('IAM', 'ROLES', '777')
+  updateRoleModuleStatus(
+    @Param('id') id: string,
+    @Param('moduleId') moduleId: string,
+    @Body() dto: UpdateRoleModuleStatusDto
+  ) {
+    return this.rolesService.updateRoleModuleStatus(id, moduleId, dto.active);
   }
 
   @Put(':id/modules')

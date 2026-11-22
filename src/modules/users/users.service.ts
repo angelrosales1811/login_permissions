@@ -175,9 +175,9 @@ export class UsersService {
       throw new NotFoundException(`UserRole relation not found`);
     }
 
-    relation.active = active;
-
     const previousStatus = relation.active;
+
+    relation.active = active;
 
     const context = this.auditContextService.getContext();
 
