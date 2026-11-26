@@ -13,7 +13,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permission.guard';
 
 import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuthUser } from '../auth/interfaces/auth-user.interface';
 import { CreatePermissionDto } from './dto/create-permission.dto';
+import { EffectivePermissionsResponseDto } from './dto/effective-permissions-response.dto';
 import { UpdatePermissionStatusDto } from './dto/update-permission-status.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { PermissionsService } from './permissions.service';
@@ -129,6 +132,48 @@ export class PermissionsController {
   @Permissions('IAM', 'PERMISSIONS', '444')
   cacheHealth() {
     return this.permissionsService.cacheHealth();
+  }
+
+  @Get('effective')
+  @ApiOperation({
+    summary: 'Obtener permisos efectivos',
+    description: `
+      Retorna todos los permisos RBAC efectivos
+      calculados para el usuario autenticado.
+
+      Utiliza security.permission_cache
+      como fuente principal.
+
+      Diseñado para:
+
+      - Frontend SPA
+      - Microservicios
+      - IAM Centralizado
+      - Token Introspection
+      `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Permisos efectivos obtenidos correctamente',
+    type: EffectivePermissionsResponseDto,
+    schema: {
+      example: {
+        userId: 'uuid-user',
+        roles: ['ADMIN'],
+        permissions: [
+          {
+            resource: 'USERS',
+            actions: ['444', '644', '777'],
+          },
+        ],
+      },
+    },
+  })
+  getEffectivePermissions(
+    @CurrentUser()
+    user: AuthUser
+  ) {
+    return this.permissionsService.getEffectivePermissions(user.id);
   }
 
   @Get(':id')

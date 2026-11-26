@@ -23,6 +23,7 @@ import { OAuthUrlResponseDto } from './dto/oauth-url-response.dto';
 
 import { GoogleCallbackResponseDto } from './dto/google-callback-response.dto';
 import { GoogleCallbackDto } from './dto/google-callback.dto';
+import { TokenIntrospectionDto } from './dto/token-introspection.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -201,12 +202,6 @@ export class AuthController {
     return this.authService.me(user);
   }
 
-  // @Get('me2')
-  // @UseGuards(JwtAuthGuard)
-  // getProfile(@CurrentUser() user: AuthUser) {
-  //   return user;
-  // }
-
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -253,6 +248,56 @@ export class AuthController {
     dto: RefreshTokenDto
   ) {
     return this.authService.refresh(dto);
+  }
+
+  @Post('token/introspect')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validar JWT en línea',
+    description: `
+      Valida un JWT emitido por IAM.
+
+      Verificaciones:
+
+      - Firma JWT
+      - Expiración
+      - Usuario activo
+      - Sesión activa
+
+      Diseñado para:
+
+      - API Gateway
+      - Zero Trust
+      - Microservicios
+      - Integraciones externas
+      `,
+  })
+  @ApiBody({
+    type: TokenIntrospectionDto,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Token validado correctamente',
+    schema: {
+      example: {
+        active: true,
+        userId: 'abc97121-c050-4bbe-a6e1-b39ccb68da0b',
+        email: 'admin@crm.com',
+        roles: ['IAM_ADMIN', 'ADMINISTRADOR'],
+        sessionId: '28c9b618-e4e8-492a-8070-abb5540e394b',
+        exp: 1778000000,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido',
+  })
+  introspectToken(
+    @Body()
+    dto: TokenIntrospectionDto
+  ) {
+    return this.authService.introspectToken(dto);
   }
 
   @Post('logout')

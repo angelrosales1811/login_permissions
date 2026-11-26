@@ -7,11 +7,21 @@ import {
 
 import { InjectRepository } from '@nestjs/typeorm';
 
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Permission } from './entities/permission.entity';
 
 import { RolePermission } from '../roles/entities/role-permission.entity';
+
+import { PermissionCache } from './entities/permission-cache.entity';
+
+import { UserRole } from '../roles/entities/user-role.entity';
+
+import { Resource } from '../resources/entities/resource.entity';
+
+import { Role } from '../roles/entities/role.entity';
+
+import { EffectivePermissionsResponseDto } from './dto/effective-permissions-response.dto';
 
 import { CreatePermissionDto } from './dto/create-permission.dto';
 
@@ -37,10 +47,22 @@ export class PermissionsService {
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
 
-    private readonly permissionCacheService: PermissionCacheService,
-
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepository: Repository<RolePermission>,
+
+    @InjectRepository(PermissionCache)
+    private readonly permissionCacheRepository: Repository<PermissionCache>,
+
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
+
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+
+    @InjectRepository(Resource)
+    private readonly resourceRepository: Repository<Resource>,
+
+    private readonly permissionCacheService: PermissionCacheService,
     private readonly auditContextService: AuditContextService,
 
     private readonly auditEntityService: AuditEntityService,
@@ -305,5 +327,82 @@ export class PermissionsService {
     });
 
     return result;
+  }
+
+  async getEffectivePermissions(userId: string): Promise<EffectivePermissionsResponseDto> {
+    const cache = await this.permissionCacheRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    const userRoles = await this.userRoleRepository.find({
+      where: {
+        user_id: userId,
+        active: true,
+      },
+    });
+
+    const roleIds = userRoles.map((role) => role.role_id);
+
+    const roles =
+      roleIds.length > 0
+        ? await this.roleRepository.find({
+            where: {
+              id: In(roleIds),
+            },
+          })
+        : [];
+
+    // findByIds(roleIds) : [];
+
+    const resourceIds = [...new Set(cache.map((item) => item.resource_id))];
+
+    const resources =
+      resourceIds.length > 0
+        ? await this.resourceRepository.find({
+            where: {
+              id: In(resourceIds),
+            },
+          })
+        : [];
+
+    // findByIds(resourceIds) : [];
+
+    const permissionsMap = new Map<string, Set<string>>();
+
+    for (const row of cache) {
+      const resource = resources.find((r) => r.id === row.resource_id);
+
+      if (!resource) {
+        continue;
+      }
+
+      if (!permissionsMap.has(resource.internal_name)) {
+        permissionsMap.set(resource.internal_name, new Set());
+      }
+
+      permissionsMap.get(resource.internal_name)!.add(row.permission_code);
+    }
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.READ_EFFECTIVE_PERMISSIONS,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.PERMISSION_CACHE,
+      recordId: userId,
+      newValues: {
+        totalPermissions: cache.length,
+      },
+    });
+
+    return {
+      userId,
+      roles: roles.map((role) => role.internal_name),
+      permissions: Array.from(permissionsMap.entries()).map(([resource, actions]) => ({
+        resource,
+        actions: Array.from(actions),
+      })),
+    };
   }
 }

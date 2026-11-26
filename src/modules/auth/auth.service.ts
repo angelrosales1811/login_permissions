@@ -34,6 +34,8 @@ import { hashToken } from './utils/hash-token.util';
 import { BadRequestException } from '@nestjs/common';
 import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
 import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
+import { TokenIntrospectionResponseDto } from './dto/token-introspection-response.dto';
+import { TokenIntrospectionDto } from './dto/token-introspection.dto';
 
 interface SupabaseLoginResponse {
   user: {
@@ -949,6 +951,74 @@ export class AuthService {
 
       permissions: user.permissions ?? {},
     };
+  }
+
+  async introspectToken(dto: TokenIntrospectionDto): Promise<TokenIntrospectionResponseDto> {
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        uid: string;
+        email: string;
+        sessionId: string;
+        roles?: string[];
+        exp: number;
+      }>(dto.token);
+
+      const user = await this.userProfileRepository.findOne({
+        where: {
+          id: payload.sub,
+          active: true,
+        },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('Usuario inactivo');
+      }
+
+      const session = await this.sessionRepository.findOne({
+        where: {
+          id: payload.sessionId,
+          user_id: payload.sub,
+          active: true,
+        },
+      });
+
+      if (!session) {
+        throw new UnauthorizedException('Sesión inactiva');
+      }
+
+      const roles = await this.rolesService.getUserRoles(payload.sub);
+
+      await this.auditLogService.record({
+        userId: payload.sub,
+        action: AUDIT_ACTIONS.TOKEN_INTROSPECTION,
+        moduleName: 'AUTH',
+        entityName: AUDIT_ENTITIES.JWT,
+        recordId: payload.sub,
+        success: true,
+        newValues: {
+          sessionId: payload.sessionId,
+        },
+      });
+
+      return {
+        active: true,
+        userId: payload.sub,
+        email: payload.email,
+        roles,
+        sessionId: payload.sessionId,
+        exp: payload.exp,
+      };
+    } catch {
+      return {
+        active: false,
+        userId: '',
+        email: '',
+        roles: [],
+        sessionId: '',
+        exp: 0,
+      };
+    }
   }
 
   async logout(userId: string, sessionId: string) {
