@@ -918,6 +918,9 @@ export class RolesService {
           role: role.internal_name.toUpperCase(),
 
           permissions: [],
+          role_id: '',
+          module_id: '',
+          resource_id: '',
         });
       }
 
@@ -925,5 +928,13 @@ export class RolesService {
     }
 
     return Array.from(matrix.values());
+  }
+
+  async getRolePermissionMatrix(roleId: string) {
+    await this.findOne(roleId);
+
+    const globalMatrix = await this.getPermissionMatrix();
+
+    return globalMatrix.filter((item) => item.role_id === roleId);
   }
 }

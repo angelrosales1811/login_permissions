@@ -137,6 +137,19 @@ export class RolesController {
     return this.rolesService.getPermissionMatrix();
   }
 
+  @Get(':id/permission-matrix')
+  @ApiOperation({
+    summary: 'Obtener matriz RBAC de un rol específico',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del rol',
+  })
+  @Permissions('IAM', 'ROLES', '444')
+  getRolePermissionMatrix(@Param('id') id: string) {
+    return this.rolesService.getRolePermissionMatrix(id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Obtener rol por ID',

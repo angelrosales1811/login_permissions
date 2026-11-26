@@ -22,6 +22,8 @@ import { AuditEntityService } from '../../common/services/audit-entity.service';
 import { AUDIT_ACTIONS } from '../../common/constants/audit-actions.constant';
 import { AUDIT_ENTITIES } from '../../common/constants/audit-entities.constant';
 import { AuditLogService } from '../../common/services/audit-log.service';
+import { AssignModuleResourceDto } from './dto/assign-module-resource.dto';
+import { UpdateModuleResourcesDto } from './dto/update-module-resources.dto';
 
 @Injectable()
 export class ModulesService {
@@ -215,5 +217,242 @@ export class ModulesService {
     });
 
     return updated;
+  }
+
+  async getModuleResources(moduleId: string, query?: CatalogFilterDto): Promise<ModuleResource[]> {
+    await this.findOne(moduleId);
+
+    const where: {
+      module_id: string;
+      active?: boolean;
+    } = {
+      module_id: moduleId,
+    };
+
+    if (!query?.includeInactive) {
+      where.active = query?.active !== undefined ? query.active : true;
+    }
+
+    return this.moduleResourceRepository.find({
+      where,
+    });
+  }
+
+  async assignModuleResource(
+    moduleId: string,
+    dto: AssignModuleResourceDto
+  ): Promise<ModuleResource> {
+    await this.findOne(moduleId);
+
+    const resource = await this.resourceRepository.findOne({
+      where: {
+        id: dto.resourceId,
+        active: true,
+      },
+    });
+
+    if (!resource) {
+      throw new NotFoundException(`Resource ${dto.resourceId} not found`);
+    }
+
+    const existing = await this.moduleResourceRepository.findOne({
+      where: {
+        module_id: moduleId,
+        resource_id: dto.resourceId,
+      },
+    });
+
+    const context = this.auditContextService.getContext();
+
+    if (existing) {
+      if (existing.active) {
+        return existing;
+      }
+
+      existing.active = true;
+
+      this.auditEntityService.applyUpdateAudit(existing, context);
+
+      const saved = await this.moduleResourceRepository.save(existing);
+
+      await this.auditLogService.record({
+        action: AUDIT_ACTIONS.REACTIVATE,
+        moduleName: 'IAM',
+        entityName: AUDIT_ENTITIES.MODULE_RESOURCE,
+        recordId: saved.id,
+        oldValues: {
+          moduleId,
+          resourceId: dto.resourceId,
+          active: false,
+        },
+        newValues: {
+          moduleId,
+          resourceId: dto.resourceId,
+          active: true,
+        },
+      });
+
+      return saved;
+    }
+
+    const relation = this.moduleResourceRepository.create({
+      module_id: moduleId,
+      resource_id: dto.resourceId,
+      active: true,
+    });
+
+    this.auditEntityService.applyCreationAudit(relation, context);
+
+    const saved = await this.moduleResourceRepository.save(relation);
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.CREATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE_RESOURCE,
+      recordId: saved.id,
+      oldValues: {},
+      newValues: {
+        moduleId,
+        resourceId: dto.resourceId,
+        active: true,
+      },
+    });
+
+    return saved;
+  }
+
+  async updateModuleResourceStatus(
+    moduleId: string,
+    resourceId: string,
+    active: boolean
+  ): Promise<ModuleResource> {
+    const relation = await this.moduleResourceRepository.findOne({
+      where: {
+        module_id: moduleId,
+        resource_id: resourceId,
+      },
+    });
+
+    if (!relation) {
+      throw new NotFoundException('ModuleResource relation not found');
+    }
+
+    const previousStatus = relation.active;
+
+    relation.active = active;
+
+    const context = this.auditContextService.getContext();
+
+    this.auditEntityService.applyUpdateAudit(relation, context);
+
+    const updated = await this.moduleResourceRepository.save(relation);
+
+    await this.auditLogService.record({
+      action: active ? AUDIT_ACTIONS.REACTIVATE : AUDIT_ACTIONS.DEACTIVATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE_RESOURCE,
+      recordId: updated.id,
+      oldValues: {
+        moduleId,
+        resourceId,
+        active: previousStatus,
+      },
+      newValues: {
+        moduleId,
+        resourceId,
+        active,
+      },
+    });
+
+    return updated;
+  }
+
+  async updateModuleResources(moduleId: string, dto: UpdateModuleResourcesDto): Promise<void> {
+    await this.findOne(moduleId);
+
+    const oldRelations = await this.moduleResourceRepository.find({
+      where: {
+        module_id: moduleId,
+        active: true,
+      },
+    });
+
+    const oldValues = oldRelations.map((relation) => ({
+      resource_id: relation.resource_id,
+    }));
+
+    const context = this.auditContextService.getContext();
+
+    for (const resourceId of dto.resourceIds) {
+      const resource = await this.resourceRepository.findOne({
+        where: {
+          id: resourceId,
+          active: true,
+        },
+      });
+
+      if (!resource) {
+        throw new NotFoundException(`Resource ${resourceId} not found`);
+      }
+    }
+
+    const currentRelations = await this.moduleResourceRepository.find({
+      where: {
+        module_id: moduleId,
+        active: true,
+      },
+    });
+
+    for (const relation of currentRelations) {
+      relation.active = false;
+
+      this.auditEntityService.applyUpdateAudit(relation, context);
+
+      await this.moduleResourceRepository.save(relation);
+    }
+
+    for (const resourceId of dto.resourceIds) {
+      const existing = await this.moduleResourceRepository.findOne({
+        where: {
+          module_id: moduleId,
+          resource_id: resourceId,
+        },
+      });
+
+      if (existing) {
+        existing.active = true;
+
+        this.auditEntityService.applyUpdateAudit(existing, context);
+
+        await this.moduleResourceRepository.save(existing);
+
+        continue;
+      }
+
+      const relation = this.moduleResourceRepository.create({
+        module_id: moduleId,
+        resource_id: resourceId,
+        active: true,
+      });
+
+      this.auditEntityService.applyCreationAudit(relation, context);
+
+      await this.moduleResourceRepository.save(relation);
+    }
+
+    await this.auditLogService.record({
+      action: AUDIT_ACTIONS.UPDATE,
+      moduleName: 'IAM',
+      entityName: AUDIT_ENTITIES.MODULE_RESOURCE,
+      recordId: moduleId,
+      oldValues: {
+        resources: oldValues,
+        totalResources: oldValues.length,
+      },
+      newValues: {
+        resourceIds: dto.resourceIds,
+        totalResources: dto.resourceIds.length,
+      },
+    });
   }
 }

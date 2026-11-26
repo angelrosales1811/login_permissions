@@ -18,6 +18,7 @@ import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { AssignUserRoleDto } from './dto/assign-user-role.dto';
 import { UpdateUserRoleStatusDto } from './dto/update-user-role-status.dto';
 
+import { NavigationService } from '../navigation/navigation.service';
 import { UsersService } from './users.service';
 
 @ApiTags('Users')
@@ -25,7 +26,10 @@ import { UsersService } from './users.service';
 @Controller('users')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly navigationService: NavigationService
+  ) {}
 
   @Post()
   @ApiOperation({
@@ -171,6 +175,115 @@ export class UsersController {
   })
   getUserRoles(@Param('id') id: string, @Query() query: CatalogFilterDto) {
     return this.usersService.getUserRoles(id, query);
+  }
+
+  @Get(':id/access-tree')
+  @ApiOperation({
+    summary: 'Obtener árbol completo de acceso del usuario',
+    description: `
+  Devuelve toda la estructura efectiva de autorización.
+
+  Applications
+  ↓
+  Modules
+  ↓
+  Resources
+  ↓
+  Permissions
+  ↓
+  Roles
+  ↓
+  User
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del usuario',
+  })
+  @Permissions('IAM', 'USERS', '444')
+  getAccessTree(@Param('id') id: string) {
+    return this.usersService.getAccessTree(id);
+  }
+
+  @Get(':id/menu-tree')
+  @ApiOperation({
+    summary: 'Obtener árbol completo de navegación del usuario',
+    description: `
+      Construye la navegación efectiva del usuario.
+
+      User
+      ↓
+      Applications
+      ↓
+      Menus
+      ↓
+      Menu Items
+
+      Utilizado para:
+
+      - Diagramas
+      - Auditoría
+      - Diagnóstico
+      - Frontend
+      - Navegación dinámica
+      `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Árbol de navegación obtenido correctamente',
+  })
+  @Permissions('IAM', 'USERS', '444')
+  getMenuTree(@Param('id') id: string) {
+    return this.usersService.getMenuTree(id);
+  }
+
+  @Get(':id/system-tree')
+  @ApiOperation({
+    summary: 'Obtener árbol completo del sistema para un usuario',
+    description: `
+      Usuario
+      ↓
+      Aplicaciones
+          ↓
+          Roles
+          ↓
+          Módulos
+              ↓
+              Recursos
+                  ↓
+                  Permisos
+
+      Aplicaciones
+          ↓
+          Menús
+              ↓
+              Menu Items
+                  ↓
+                  Permisos requeridos
+                      ↓
+                      Recurso
+                      ↓
+                      Permiso
+
+      Todos los nodos incluyen IDs para auditoría,
+      trazabilidad, diagramas y exportación.
+      `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Árbol completo obtenido correctamente',
+  })
+  @Permissions('IAM', 'USERS', '444')
+  getSystemTree(@Param('id') id: string) {
+    return this.usersService.getSystemTree(id);
   }
 
   @Post(':id/roles')

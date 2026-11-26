@@ -7,5 +7,5 @@ export class ReorderMenuItemDto {
   })
   @IsInt()
   @Min(0)
-  display_order: number;
+  display_order!: number;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 
 import {
   ApiBearerAuth,
@@ -17,7 +17,10 @@ import { ModulesService } from './modules.service';
 
 import { CatalogFilterDto } from '../../common/dto/catalog-filter.dto';
 import { UpdateStatusDto } from '../../common/dto/update-status.dto';
+import { AssignModuleResourceDto } from './dto/assign-module-resource.dto';
 import { CreateModuleDto } from './dto/create-module.dto';
+import { UpdateModuleResourceStatusDto } from './dto/update-module-resource-status.dto';
+import { UpdateModuleResourcesDto } from './dto/update-module-resources.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 
 @ApiTags('Modules')
@@ -151,6 +154,73 @@ export class ModulesController {
   @Permissions('IAM', 'MODULES', '444')
   findOne(@Param('id') id: string) {
     return this.modulesService.findOne(id);
+  }
+
+  @Get(':id/resources')
+  @ApiOperation({
+    summary: 'Consultar recursos del módulo',
+    description: `
+  Obtiene todos los recursos asociados al módulo.
+
+  Tabla relacionada:
+
+  public.module_resources
+
+  Filtros soportados:
+
+  GET ?active=true
+
+  GET ?active=false
+
+  GET ?includeInactive=true
+  `,
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID del módulo',
+  })
+  @ApiQuery({
+    name: 'active',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+  })
+  @Permissions('IAM', 'MODULES', '444')
+  getModuleResources(@Param('id') id: string, @Query() query: CatalogFilterDto) {
+    return this.modulesService.getModuleResources(id, query);
+  }
+
+  @Post(':id/resources')
+  @ApiOperation({
+    summary: 'Asignar recurso al módulo',
+  })
+  @Permissions('IAM', 'MODULES', '644')
+  assignModuleResource(@Param('id') id: string, @Body() dto: AssignModuleResourceDto) {
+    return this.modulesService.assignModuleResource(id, dto);
+  }
+
+  @Patch(':id/resources/:resourceId/status')
+  @ApiOperation({
+    summary: 'Actualizar estado de asignación módulo-recurso',
+  })
+  @Permissions('IAM', 'MODULES', '777')
+  updateModuleResourceStatus(
+    @Param('id') id: string,
+    @Param('resourceId') resourceId: string,
+    @Body() dto: UpdateModuleResourceStatusDto
+  ) {
+    return this.modulesService.updateModuleResourceStatus(id, resourceId, dto.active);
+  }
+
+  @Put(':id/resources')
+  @ApiOperation({
+    summary: 'Reemplazar recursos del módulo',
+  })
+  @Permissions('IAM', 'MODULES', '644')
+  updateModuleResources(@Param('id') id: string, @Body() dto: UpdateModuleResourcesDto) {
+    return this.modulesService.updateModuleResources(id, dto);
   }
 
   @Patch(':id')
