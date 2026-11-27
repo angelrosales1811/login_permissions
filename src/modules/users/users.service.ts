@@ -386,20 +386,6 @@ export class UsersService {
 
     const moduleIds = [...new Set(roleModules.map((relation) => relation.module_id))];
 
-    const moduleResources = await this.moduleResourceRepository.find({
-      where: moduleIds.map((moduleId) => ({
-        module_id: moduleId,
-        active: true,
-      })),
-    });
-
-    const rolePermissions = await this.rolePermissionRepository.find({
-      where: roleIds.map((roleId) => ({
-        role_id: roleId,
-        active: true,
-      })),
-    });
-
     const modules = await this.moduleRepository.find({
       where: moduleIds.map((id) => ({
         id,
@@ -407,11 +393,25 @@ export class UsersService {
       })),
     });
 
-    const resourceIds = [...new Set(moduleResources.map((resource) => resource.resource_id))];
+    const moduleResources = await this.moduleResourceRepository.find({
+      where: moduleIds.map((moduleId) => ({
+        module_id: moduleId,
+        active: true,
+      })),
+    });
+
+    const resourceIds = [...new Set(moduleResources.map((relation) => relation.resource_id))];
 
     const resources = await this.resourceRepository.find({
       where: resourceIds.map((id) => ({
         id,
+        active: true,
+      })),
+    });
+
+    const rolePermissions = await this.rolePermissionRepository.find({
+      where: roleIds.map((roleId) => ({
+        role_id: roleId,
         active: true,
       })),
     });
@@ -429,17 +429,35 @@ export class UsersService {
 
     const menus = await this.navigationService.getMenusByUser(userId);
 
-    // const menuItems = await this.menuItemRepository.find({
-    //   where: {
-    //     active: true,
-    //   },
-    // });
+    const menuItems = await this.menuItemRepository.find({
+      where: {
+        active: true,
+      },
+    });
 
     const menuPermissions = await this.menuPermissionRepository.find({
       where: {
         active: true,
       },
     });
+
+    // =========================
+    // LOOKUP MAPS
+    // =========================
+
+    const menuItemMap = new Map<string, MenuItemEntity>(menuItems.map((item) => [item.id, item]));
+
+    const moduleResourceMap = new Map<string, string>(
+      moduleResources.map((relation) => [relation.module_id, relation.resource_id])
+    );
+
+    const resourceMap = new Map<string, Resource>(
+      resources.map((resource) => [resource.id, resource])
+    );
+
+    const permissionMap = new Map<string, Permission>(
+      permissions.map((permission) => [permission.id, permission])
+    );
 
     return {
       user: {
@@ -474,7 +492,7 @@ export class UsersService {
               externalName: moduleEntity?.external_name,
 
               resources: moduleResources
-                .filter((resource) => resource.module_id === relation.module_id)
+                .filter((resourceRelation) => resourceRelation.module_id === relation.module_id)
                 .map((resourceRelation) => {
                   const resource = resources.find(
                     (item) => item.id === resourceRelation.resource_id
@@ -487,7 +505,8 @@ export class UsersService {
 
                     permissions: rolePermissions
                       .filter(
-                        (permission) => permission.resource_id === resourceRelation.resource_id
+                        (permissionRelation) =>
+                          permissionRelation.resource_id === resourceRelation.resource_id
                       )
                       .map((permissionRelation) => {
                         const permission = permissions.find(
@@ -518,18 +537,17 @@ export class UsersService {
                 ...item,
 
                 requiredPermissions: itemPermissions.map((itemPermission) => {
-                  const permission = permissions.find(
-                    (permissionEntity) => permissionEntity.id === itemPermission.permissionId
-                  );
+                  const permission = permissionMap.get(itemPermission.permissionId);
 
-                  const rolePermission = rolePermissions.find(
-                    (rolePermissionEntity) =>
-                      rolePermissionEntity.permission_id === itemPermission.permissionId
-                  );
+                  // Obtener el módulo asociado al menu item
+                  const menuItemEntity = menuItemMap.get(item.id);
 
-                  const resource = resources.find(
-                    (resourceEntity) => resourceEntity.id === rolePermission?.resource_id
-                  );
+                  // Obtener el recurso asociado al módulo
+                  const resourceId = menuItemEntity?.moduleId
+                    ? moduleResourceMap.get(menuItemEntity.moduleId)
+                    : undefined;
+
+                  const resource = resourceId ? resourceMap.get(resourceId) : undefined;
 
                   return {
                     permission: {
